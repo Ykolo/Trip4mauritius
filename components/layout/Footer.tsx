@@ -33,7 +33,7 @@ export function Footer() {
           <Image src="/images/logo.jpg" alt="Trip4mauritius" width={180} height={60} className="h-12 w-auto object-contain rounded-xl drop-shadow-sm" />
           
           <div className="flex items-center gap-4">
-            <a href="https://ig.me/m/trip4mauritius" target="_blank" className="w-10 h-10 rounded-full bg-white/15 border border-white/20 flex items-center justify-center text-white hover:bg-white/25 hover:scale-110 transition-all">
+            <a href="https://instagram.com/trip4mauritius/" target="_blank" className="w-10 h-10 rounded-full bg-white/15 border border-white/20 flex items-center justify-center text-white hover:bg-white/25 hover:scale-110 transition-all">
               <Instagram className="w-5 h-5" />
             </a>
             <a href="https://whatsapp.com" target="_blank" className="w-10 h-10 rounded-full bg-white/15 border border-white/20 flex items-center justify-center text-white hover:bg-white/25 hover:scale-110 transition-all">
