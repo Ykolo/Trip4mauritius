@@ -26,12 +26,12 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
   icons: {
     icon: [
-      { url: "/images/logo.jpg", type: "image/jpeg" },
+      { url: "/images/logopen.jpg", type: "image/jpeg" },
     ],
-    apple: "/images/logo.jpg",
+    apple: "/images/logopen.jpg",
   },
   openGraph: {
-    images: ["/images/logo.jpg"],
+    images: ["/images/logopen.jpg"],
   },
   appleWebApp: {
     capable: true,
