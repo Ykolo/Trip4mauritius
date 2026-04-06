@@ -1,0 +1,17 @@
+export default function OperatorBookingsPage() {
+  return (
+    <div className="p-6 md:p-10 max-w-6xl mx-auto">
+      <header className="mb-8">
+        <h1 className="font-body font-bold text-3xl text-ink">Gestions des Réservations</h1>
+        <p className="text-muted mt-1">Liste de vos passagers, statuts de paiement et historiques de réservation.</p>
+      </header>
+
+      <div className="bg-white rounded-2xl shadow-card border border-muted/10 p-6 min-h-[400px] flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-ink font-body font-bold mb-2">Interface en construction 🚀</p>
+          <p className="text-muted font-body text-sm">Le data-table des réservations va arriver ici.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
