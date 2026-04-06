@@ -1,4 +1,4 @@
-const CACHE_NAME = "mauriexplore-v1";
+const CACHE_NAME = "trip4mauritius-v1";
 
 const STATIC_ASSETS = ["/_next/static/**"];
 

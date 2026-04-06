@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import type { ActivityFilters } from '@/types/activity'
 
 const REGIONS = ['Nord', 'Sud', 'Est', 'Ouest', 'Centre']
-const CATEGORIES = ['Sports Nautiques', 'Nature', 'Croisières', 'Excursions', 'Culture', 'Gastronomie', 'Aventure', 'Bien-être']
+const CATEGORIES = ['Sports Nautiques', 'Nature', 'Croisières', 'Excursions', 'Culture', 'Gastronomie', 'Aventure', 'Bien-être', 'Véhicules']
 const DURATIONS = ['Toutes', '< 2h', 'Demi-journée', 'Journée', 'Plusieurs jours']
 
 interface FilterDrawerProps {

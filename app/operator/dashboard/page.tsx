@@ -5,7 +5,7 @@ export default function OperatorDashboardPage() {
     <div className="p-6 md:p-10 max-w-6xl mx-auto">
       <header className="mb-8">
         <h1 className="font-display text-3xl text-primary md:hidden mb-1 flex items-center justify-between">
-          MauriExplore<span className="text-ink font-body text-xs font-bold uppercase tracking-wider bg-white shadow-sm border border-muted/10 px-2 py-1 rounded-md">Pro</span>
+          Trip4mauritius<span className="text-ink font-body text-xs font-bold uppercase tracking-wider bg-white shadow-sm border border-muted/10 px-2 py-1 rounded-md">Pro</span>
         </h1>
         <h2 className="font-body font-bold text-2xl text-ink mt-6 md:mt-0">Bonjour, Ocean Adventures 👋</h2>
         <p className="text-muted mt-1">Voici le résumé de votre activité pour aujourd'hui sur l'Île Maurice.</p>

@@ -11,6 +11,7 @@ const CATEGORIES = [
   { emoji: '🦅', label: 'Aérien', slug: 'air', image: 'https://images.unsplash.com/photo-1474302770737-173ee21bab63?w=400&q=80' },
   { emoji: '🍹', label: 'Saveurs', slug: 'gastronomie', image: 'https://images.unsplash.com/photo-1597075687490-8f673c6c17f6?w=400&q=80' },
   { emoji: '🛶', label: 'Nautisme', slug: 'nautique', image: 'https://images.unsplash.com/photo-1530866495561-507c9faab2ed?w=400&q=80' },
+  { emoji: '🚗', label: 'Véhicules', slug: 'Véhicules', image: '/images/vehicles/jeep_wrangler_1775498501364.png' },
 ] as const
 
 export function CategoryChips() {

@@ -148,6 +148,126 @@ const MOCK_ACTIVITIES: Activity[] = [
     imageUrl: '/images/regions/south.jpg',
     rating: 4.5,
     lang: ['EN', 'FR', 'DE', 'ES']
+  },
+  {
+    id: '13',
+    slug: 'rent-mini-cooper-cabriolet',
+    title: 'Location Mini Cooper S Cabriolet',
+    category: 'Véhicules',
+    region: 'North',
+    duration: 'Journée',
+    priceFrom: 120,
+    imageUrl: '/images/vehicles/mini_cooper_1775498487622.png',
+    rating: 4.8,
+    lang: ['EN', 'FR']
+  },
+  {
+    id: '14',
+    slug: 'rent-jeep-wrangler',
+    title: 'Location Jeep Wrangler 4x4',
+    category: 'Véhicules',
+    region: 'South',
+    duration: 'Plusieurs jours',
+    priceFrom: 150,
+    imageUrl: '/images/vehicles/jeep_wrangler_1775498501364.png',
+    rating: 4.9,
+    lang: ['EN', 'FR', 'DE']
+  },
+  {
+    id: '15',
+    slug: 'rent-toyota-hilux',
+    title: 'Toyota Hilux Double Cab',
+    category: 'Véhicules',
+    region: 'East',
+    duration: 'Plusieurs jours',
+    priceFrom: 110,
+    imageUrl: '/images/vehicles/jeep_wrangler_1775498501364.png',
+    rating: 4.5,
+    lang: ['EN', 'FR']
+  },
+  {
+    id: '16',
+    slug: 'rent-bmw-cabriolet',
+    title: 'BMW Série 4 Cabriolet',
+    category: 'Véhicules',
+    region: 'North',
+    duration: 'Plusieurs jours',
+    priceFrom: 220,
+    imageUrl: '/images/vehicles/porsche_macan_1775498518147.png',
+    rating: 5.0,
+    lang: ['EN', 'FR', 'ES']
+  },
+  {
+    id: '17',
+    slug: 'rent-suzuki-jimny',
+    title: 'Suzuki Jimny Safari (4x4)',
+    category: 'Véhicules',
+    region: 'West',
+    duration: 'Journée',
+    priceFrom: 80,
+    imageUrl: '/images/vehicles/jeep_wrangler_1775498501364.png',
+    rating: 4.8,
+    lang: ['EN', 'FR']
+  },
+  {
+    id: '18',
+    slug: 'rent-scooter-vespa',
+    title: 'Scooter Vespa Primavera 125',
+    category: 'Véhicules',
+    region: 'North',
+    duration: 'Journée',
+    priceFrom: 45,
+    imageUrl: '/images/vehicles/vespa_scooter_1775498553914.png',
+    rating: 4.6,
+    lang: ['EN', 'FR', 'DE']
+  },
+  {
+    id: '19',
+    slug: 'rent-porsche-macan',
+    title: 'Porsche Macan Premium SUV',
+    category: 'Véhicules',
+    region: 'Centre',
+    duration: 'Plusieurs jours',
+    priceFrom: 290,
+    imageUrl: '/images/vehicles/porsche_macan_1775498518147.png',
+    rating: 4.9,
+    lang: ['EN', 'FR']
+  },
+  {
+    id: '20',
+    slug: 'rent-hyundai-tucson',
+    title: 'Hyundai Tucson Family SUV',
+    category: 'Véhicules',
+    region: 'South',
+    duration: 'Plusieurs jours',
+    priceFrom: 95,
+    imageUrl: '/images/vehicles/porsche_macan_1775498518147.png',
+    rating: 4.4,
+    lang: ['EN', 'FR']
+  },
+  {
+    id: '21',
+    slug: 'rent-kia-picanto',
+    title: 'Kia Picanto Economy',
+    category: 'Véhicules',
+    region: 'East',
+    duration: 'Journée',
+    priceFrom: 35,
+    imageUrl: '/images/vehicles/mini_cooper_1775498487622.png', // Replace with picanto if needed
+    rating: 4.3,
+    lang: ['EN', 'FR']
+  },
+  {
+    id: '22',
+    slug: 'rent-ford-mustang',
+    title: 'Ford Mustang GT V8',
+    category: 'Véhicules',
+    region: 'North',
+    duration: 'Journée',
+    priceFrom: 350,
+    imageUrl: '/images/vehicles/ford_mustang_1775498536365.png',
+    rating: 5.0,
+    lang: ['EN', 'FR', 'DE']
   }
 ]
 

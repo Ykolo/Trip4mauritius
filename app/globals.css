@@ -13,8 +13,8 @@
   --card-foreground: #1A1A2E;
   --popover: #FFFFFF;
   --popover-foreground: #1A1A2E;
-  --primary: #2ECAB6;
-  --primary-light: #5AD4C4;
+  --primary: #0ebfd6;
+  --primary-light: #38ceea;
   --primary-foreground: #FFFFFF;
   --secondary: #FAFAF7;
   --secondary-foreground: #1A1A2E;
@@ -26,10 +26,10 @@
   --destructive-foreground: #FFFFFF;
   --border: rgba(107, 114, 128, 0.2);
   --input: rgba(107, 114, 128, 0.3);
-  --ring: #2ECAB6;
-  --chart-1: #2ECAB6;
+  --ring: #0ebfd6;
+  --chart-1: #0ebfd6;
   --chart-2: #D4AF37;
-  --chart-3: #5AD4C4;
+  --chart-3: #38ceea;
   --chart-4: #1A1A2E;
   --chart-5: #6B7280;
   --radius: 1rem;
@@ -45,8 +45,8 @@
   --card-foreground: #FAFAF7;
   --popover: #2A2A3E;
   --popover-foreground: #FAFAF7;
-  --primary: #2ECAB6;
-  --primary-light: #5AD4C4;
+  --primary: #0ebfd6;
+  --primary-light: #38ceea;
   --primary-foreground: #FFFFFF;
   --secondary: #2A2A3E;
   --secondary-foreground: #FAFAF7;
@@ -58,7 +58,7 @@
   --destructive-foreground: #FFFFFF;
   --border: rgba(107, 114, 128, 0.3);
   --input: rgba(107, 114, 128, 0.4);
-  --ring: #5AD4C4;
+  --ring: #38ceea;
   --surface: #2A2A3E;
   --base: #1A1A2E;
   --ink: #FAFAF7;

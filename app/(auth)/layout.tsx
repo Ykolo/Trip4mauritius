@@ -23,7 +23,7 @@ export default function AuthLayout({
         {/* Logo Centré au dessus du formulaire */}
         <div className="mb-8 text-center mt-12 md:mt-0">
           <Link href="/">
-            <span className="font-display text-4xl text-primary drop-shadow-sm">MauriExplore</span>
+            <span className="font-display text-4xl text-primary drop-shadow-sm">Trip4mauritius</span>
           </Link>
         </div>
         

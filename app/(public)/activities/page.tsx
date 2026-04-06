@@ -103,7 +103,7 @@ function ActivitiesContent() {
   
   // Set document title
   useEffect(() => {
-    document.title = 'Activities in Mauritius — MauriExplore'
+    document.title = 'Activities in Mauritius — Trip4mauritius'
   }, [])
   
   // Check if mobile

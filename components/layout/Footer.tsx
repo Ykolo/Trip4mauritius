@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Globe, ChevronUp, Instagram, Facebook, Ghost, Video, Apple, Shield, Trophy, Zap } from "lucide-react";
+import { Globe, ChevronUp, Instagram, MessageCircle, Apple, Shield, Trophy, Zap } from "lucide-react";
+import Image from "next/image";
 
 const languages = [
   { code: "fr", label: "Français", flag: "🇫🇷" },
@@ -29,20 +30,14 @@ export function Footer() {
         
         {/* Ligne 1 : Marque & Réseaux Sociaux */}
         <div className="flex flex-col items-center gap-4">
-          <span className="font-display text-3xl text-white drop-shadow-sm">MauriExplore</span>
+          <Image src="/images/logo.jpg" alt="Trip4mauritius" width={180} height={60} className="h-12 w-auto object-contain rounded-xl drop-shadow-sm" />
           
           <div className="flex items-center gap-4">
-            <a href="https://instagram.com" target="_blank" className="w-10 h-10 rounded-full bg-white/15 border border-white/20 flex items-center justify-center text-white hover:bg-white/25 hover:scale-110 transition-all">
+            <a href="https://ig.me/m/trip4mauritius" target="_blank" className="w-10 h-10 rounded-full bg-white/15 border border-white/20 flex items-center justify-center text-white hover:bg-white/25 hover:scale-110 transition-all">
               <Instagram className="w-5 h-5" />
             </a>
-            <a href="https://facebook.com" target="_blank" className="w-10 h-10 rounded-full bg-white/15 border border-white/20 flex items-center justify-center text-white hover:bg-white/25 hover:scale-110 transition-all">
-              <Facebook className="w-5 h-5" />
-            </a>
-            <a href="https://snapchat.com" target="_blank" className="w-10 h-10 rounded-full bg-white/15 border border-white/20 flex items-center justify-center text-white hover:bg-white/25 hover:scale-110 transition-all">
-              <Ghost className="w-5 h-5" />
-            </a>
-            <a href="https://tiktok.com" target="_blank" className="w-10 h-10 rounded-full bg-white/15 border border-white/20 flex items-center justify-center text-white hover:bg-white/25 hover:scale-110 transition-all">
-              <Video className="w-5 h-5" />
+            <a href="https://whatsapp.com" target="_blank" className="w-10 h-10 rounded-full bg-white/15 border border-white/20 flex items-center justify-center text-white hover:bg-white/25 hover:scale-110 transition-all">
+              <MessageCircle className="w-5 h-5" />
             </a>
           </div>
         </div>
@@ -183,7 +178,7 @@ export function Footer() {
               <a href="#" className="font-body text-xs text-white/70 hover:text-white">Devenir Opérateur</a>
           </div>
           <p className="text-[10px] text-white/50 font-body uppercase tracking-widest">
-            © {new Date().getFullYear()} MauriExplore Luxury
+            © {new Date().getFullYear()} Trip4mauritius
           </p>
         </div>
 

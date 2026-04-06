@@ -19,7 +19,7 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  title: "MauriExplore - Discover Mauritius",
+  title: "Trip4mauritius - Discover Mauritius",
   description:
     "Luxury tourism marketplace for Mauritius. Discover and book amazing activities, tours, and experiences on the beautiful island of Mauritius.",
   generator: "Next.js",
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "MauriExplore",
+    title: "Trip4mauritius",
   },
   formatDetection: {
     telephone: false,

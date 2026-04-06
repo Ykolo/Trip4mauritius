@@ -49,7 +49,7 @@ export function HeroSection() {
           Découvrez l'Île Maurice Autrement
         </h1>
         <p className="font-sans font-light text-white/90 text-lg md:text-xl mb-8 max-w-2xl mx-auto">
-          Réservez des expériences uniques avec les meilleurs guides locaux
+          Le guide des plus belles expériences
         </p>
         
         {/* Search Bar */}

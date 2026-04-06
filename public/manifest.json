@@ -1,6 +1,6 @@
 {
-  "name": "MauriExplore",
-  "short_name": "MauriExplore",
+  "name": "Trip4mauritius",
+  "short_name": "Trip4mauritius",
   "display": "standalone",
   "start_url": "/",
   "theme_color": "#06B6D4",

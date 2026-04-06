@@ -18,7 +18,7 @@ export function OperatorSidebar() {
   return (
     <aside className="hidden md:flex flex-col w-64 h-screen bg-surface border-r border-muted/20 sticky top-0">
       <div className="h-16 flex items-center px-6 border-b border-muted/20 shrink-0">
-        <span className="font-display text-2xl text-primary">MauriExplore<span className="text-ink font-body text-xs font-bold uppercase tracking-wider ml-2 bg-base px-2 py-1 rounded-md">Pro</span></span>
+        <span className="font-display text-2xl text-primary">Trip4mauritius<span className="text-ink font-body text-xs font-bold uppercase tracking-wider ml-2 bg-base px-2 py-1 rounded-md">Pro</span></span>
       </div>
       
       <nav className="flex-1 overflow-y-auto py-6 px-4 space-y-2">
