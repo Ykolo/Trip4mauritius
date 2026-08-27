@@ -1,0 +1,269 @@
+// MauriExplore — schéma canonique.
+// Voir docs/BACKEND-PLAN.md.
+//
+// ⚠️ NE JAMAIS lancer `prisma db push` sur ce projet.
+// Les contraintes CHECK (capacité des créneaux, cohérence des montants) ne sont
+// pas exprimables en Prisma : elles vivent dans le SQL des migrations, écrit à
+// la main. `db push` court-circuite les migrations et les supprimerait
+// silencieusement — la survente redeviendrait possible sans aucune erreur.
+// Utiliser exclusivement `prisma migrate dev` / `prisma migrate deploy`.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Prisma 7 : plus d'`url` ni de `directUrl` ici.
+// URL des commandes CLI  → prisma.config.ts (endpoint direct)
+// URL du runtime         → driver adapter dans lib/db.ts (endpoint poolé)
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Better Auth — modèles imposés par l'adapter.
+// Structure dictée par Better Auth : on l'étend (role, locale), on ne la
+// renomme pas. Se battre contre l'adapter coûte plus cher à chaque montée de
+// version que d'accepter ses conventions.
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String   @id @default(cuid())
+  name          String
+  email         String   @unique
+  emailVerified Boolean  @default(false)
+  image         String?
+
+  // additionalFields Better Auth — le rôle voyage dans la session, ce qui évite
+  // un aller-retour base à chaque requête tRPC.
+  role   UserRole @default(tourist)
+  locale String   @default("fr")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions Session[]
+  accounts Account[]
+  operator Operator?
+  bookings Booking[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  ipAddress String?
+  userAgent String?
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+// ---------------------------------------------------------------------------
+// Domaine
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  tourist
+  operator
+  admin
+}
+
+enum ActivityStatus {
+  draft
+  pending_moderation
+  published
+  rejected
+  // Les activités sont archivées, jamais supprimées : activities→slots est en
+  // CASCADE et slots→bookings en RESTRICT, donc une suppression d'activité
+  // réservée casserait sur une contrainte de clé étrangère illisible.
+  archived
+}
+
+enum BookingStatus {
+  // pending_payment / expired ne sont pas utilisés tant que Stripe n'est pas
+  // branché, mais restent définis : ajouter un état plus tard est une
+  // migration, l'omettre forcerait à réécrire la machine à états.
+  pending_payment
+  confirmed
+  expired
+  cancelled
+  completed
+}
+
+model Operator {
+  id              String  @id @default(cuid())
+  userId          String  @unique
+  displayName     String
+  avatarUrl       String?
+  verified        Boolean @default(false)
+  stripeAccountId String? @unique
+  payoutEnabled   Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activities Activity[]
+
+  @@map("operators")
+}
+
+model Activity {
+  id         String @id @default(cuid())
+  operatorId String
+  slug       String @unique
+
+  title    String
+  category String
+  region   String
+  duration String
+
+  // priceFrom, exposé par le front, est DÉRIVÉ — jamais stocké.
+  priceHt         Decimal @db.Decimal(10, 2)
+  maxParticipants Int
+
+  languages String[] @default([])
+  imageUrls String[] @default([])
+  included  String[] @default([])
+  excluded  String[] @default([])
+
+  // Les 5 clés fr|en|de|es|ru sont validées par Zod à l'écriture : un objet
+  // partiel casse l'affichage sans lever d'erreur.
+  description Json @default("{}")
+
+  status ActivityStatus @default(draft)
+
+  // Alimentés par rien pour l'instant (les avis sont hors périmètre) : le seed
+  // les fixe en dur. Colonnes en attente, pas une fonctionnalité.
+  rating      Decimal? @db.Decimal(2, 1)
+  reviewCount Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  operator Operator       @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  slots    ActivitySlot[]
+
+  @@index([status, region, category])
+  @@index([operatorId])
+  @@map("activities")
+}
+
+model ActivitySlot {
+  id         String @id @default(cuid())
+  activityId String
+
+  // timestamptz. Tout formatage vers date/heure affichée est épinglé sur
+  // Indian/Mauritius (UTC+4) — jamais le fuseau du navigateur, sous peine
+  // d'afficher un départ de 09:00 à 07:00 pour un touriste à Paris.
+  startsAt DateTime @db.Timestamptz(6)
+
+  maxSpots Int
+  // Compteur croissant. On ne stocke JAMAIS spotsLeft : un compteur qui ne fait
+  // qu'augmenter se protège par une contrainte, et rend la survente impossible.
+  spotsTaken Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  activity Activity  @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@unique([activityId, startsAt])
+  @@index([activityId, startsAt])
+  @@map("activity_slots")
+}
+
+model Booking {
+  id         String @id @default(cuid())
+  bookingRef String @unique
+  userId     String
+  slotId     String
+
+  participants     Int
+  totalPrice       Decimal @db.Decimal(10, 2)
+  depositDue       Decimal @db.Decimal(10, 2)
+  balanceDueOnSite Decimal @db.Decimal(10, 2)
+
+  status                BookingStatus @default(pending_payment)
+  stripePaymentIntentId String?       @unique
+  expiresAt             DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  slot     ActivitySlot @relation(fields: [slotId], references: [id], onDelete: Restrict)
+  payments Payment[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status, expiresAt])
+  @@index([slotId])
+  @@map("bookings")
+}
+
+model Payment {
+  id                    String  @id @default(cuid())
+  bookingId             String
+  stripePaymentIntentId String  @unique
+  amount                Decimal @db.Decimal(10, 2)
+  currency              String  @default("EUR")
+  status                String
+  raw                   Json?
+
+  createdAt DateTime @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+  @@map("payments")
+}
+
+// Idempotence des webhooks Stripe : Stripe rejoue ses événements, et sans cette
+// table un rejeu double-confirmerait une réservation.
+model ProcessedStripeEvent {
+  eventId     String   @id
+  processedAt DateTime @default(now())
+
+  @@map("processed_stripe_events")
+}
