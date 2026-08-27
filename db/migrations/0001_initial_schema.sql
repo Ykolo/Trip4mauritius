@@ -1,3 +1,12 @@
+-- ⚠️ SUPERSEDED — NE PLUS APPLIQUER, NE PLUS MODIFIER.
+--
+-- Ce fichier a été appliqué une fois sur Neon, avant le choix de Prisma + Better Auth.
+-- Il est conservé uniquement comme référence du modèle de domaine.
+--
+-- Le schéma qui fait autorité est désormais `prisma/schema.prisma`, et l'historique
+-- de migration appartient à `prisma migrate`. Réappliquer ce fichier mettrait Prisma
+-- en dérive. Voir docs/BACKEND-PLAN.md §2.
+--
 -- 0001_initial_schema.sql
 -- MauriExplore — schéma initial (voir docs/BACKEND-PLAN.md §2)
 -- Cible : Neon Postgres, projet trip4mauritius
