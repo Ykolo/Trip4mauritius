@@ -2,13 +2,11 @@
 
 > [!NOTE]
 > **État actuel** : frontend 100 % mock. Aucune route API, aucune auth, aucune requête base.
-> Toute la donnée vient de `MOCK_ACTIVITIES` / `MOCK_CART_ITEMS` (`lib/hooks/useActivities.ts`, `lib/hooks/useCart.ts`).
 > **Infra prête** : Neon `trip4mauritius` (eu-central-1, PG 18), Vercel `ykolos-projects/trip4mauritius`, auto-deploy sur push.
 
 > [!IMPORTANT]
-> **Périmètre de cette itération : tout sauf le paiement.**
-> Lecture, auth, réservation, espace opérateur, modération admin. Une réservation passe directement à `confirmed`.
-> Stripe et les reversements opérateurs sont explicitement reportés (§11).
+> **Périmètre : tout sauf le paiement.** Lecture, auth, réservation, espace opérateur, modération admin.
+> Une réservation passe directement à `confirmed`. Stripe et les reversements sont reportés (§12).
 
 ---
 
@@ -16,82 +14,74 @@
 
 | Couche | Choix |
 |--------|-------|
-| API | **tRPC v11** (routers typés) + Route Handlers pour les entrées machine |
+| API | **tRPC v11** + Route Handlers pour les entrées machine |
+| Rendu public | **React Server Components** (voir §2) |
 | Runtime | Next.js 16, runtime **Node.js** (Fluid Compute) — jamais Edge |
 | Base | Neon Postgres 18, eu-central-1 |
-| ORM | **Prisma** (+ `directUrl` pour les migrations) |
+| ORM | **Prisma** |
 | Auth | **Better Auth** — Google, Apple, magic link, email/mot de passe |
-| Validation | **Zod** (déjà installé) |
+| Validation | **Zod** |
 | Données client | TanStack Query, via l'intégration tRPC |
-| Fichiers | Vercel Blob (photos activités) |
-| Email | Resend (magic link + confirmations) |
-
-### Pourquoi tRPC s'impose bien ici
-
-Le front est **entièrement en composants clients** (`'use client'` partout, données via hooks). tRPC + TanStack Query se substitue aux mocks presque 1:1 : la signature des hooks change peu, les composants ne bougent pas. C'est le scénario où tRPC coûte le moins et rapporte le plus.
-
-### Deux surfaces, pas une
-
-```
-app/api/trpc/[trpc]/route.ts   → tRPC        : tout ce que l'app appelle
-app/api/auth/[...all]/route.ts → Better Auth : sessions, OAuth, magic link
-app/api/webhooks/stripe/route.ts → plain     : (reporté) signature = corps brut, incompatible tRPC
-app/api/cron/*/route.ts          → plain     : appelé par Vercel Cron, pas par un client typé
-```
-
-**Tout ce qui n'est pas appelé par ton propre front reste un Route Handler.** tRPC n'apporte rien à une machine qui n'a pas ton client typé, et sa couche de parsing gêne la vérification de signature.
+| Fichiers | Vercel Blob |
+| Email | Resend |
 
 ---
 
-## 2. Réconciliation du schéma — à traiter en premier
+## 2. Stratégie de rendu — à lire avant tout le reste
 
-La migration SQL `db/migrations/0001_initial_schema.sql` est **déjà appliquée** en base. Elle entre en conflit avec la suite sur deux points :
+**Le problème constaté.** Aujourd'hui `/activities` ne sert que des skeletons dans son HTML : `useActivities` remplit ses données dans un `useEffect`, donc au rendu serveur `data` est `null`. Et `/activities/[slug]`, bien que composant serveur, **fabrique son titre depuis l'URL** sans aucune donnée réelle. Les deux pages centrales de la marketplace ne livrent rien d'indexable.
 
-1. **Better Auth apporte ses propres tables** : `user`, `session`, `account`, `verification`. Ma table `users` fait doublon.
-2. **`prisma migrate` veut être seul maître du schéma.** Une migration écrite à la main hors de son historique le met en dérive dès la première commande.
+Brancher tRPC en fetch client sur ces pages **conserverait** ce défaut. Pour une marketplace touristique dont l'acquisition passe par la recherche organique, c'est inacceptable.
 
-**Décision : on repart de Prisma, et `0001_initial_schema.sql` devient caduque.** La base est vide — le coût est nul, c'est le bon moment. Concrètement :
+**Décision : architecture hybride.**
 
-- `prisma migrate reset` sur la base Neon (rien à perdre, zéro ligne).
-- Le schéma canonique devient `prisma/schema.prisma`.
-- On garde le fichier SQL en référence documentaire, marqué *superseded*, ou on le supprime. Ne pas le laisser traîner comme s'il faisait autorité.
+| Surface | Rendu | Pourquoi |
+|---------|-------|----------|
+| `/`, `/activities`, `/activities/[slug]` | **RSC**, lecture serveur | contenu indexable, premier rendu rapide |
+| Filtres, panier, checkout | client | interactif par nature |
+| `/account`, `/bookings`, `/operator/*` | client + tRPC | authentifié, jamais indexé |
 
-On adopte les conventions Better Auth (`user` au singulier, ses noms de colonnes) et on **étend** son modèle plutôt que de l'adapter au nôtre. Se battre contre l'adapter à chaque montée de version coûte plus cher que d'accepter ses noms.
+**Les filtres sont déjà pilotés par l'URL** (`useSearchParams` dans `activities/page.tsx`). C'est une chance : un changement de filtre devient une navigation, le serveur re-rend la liste filtrée, et chaque combinaison de filtres est indexable. On travaille avec le grain existant, pas contre.
 
-### Modèle cible
+### Une couche service, deux consommateurs
 
-```prisma
-model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  emailVerified Boolean   @default(false)
-  name          String?
-  image         String?
-  // champs métier ajoutés via additionalFields côté Better Auth
-  role          UserRole  @default(tourist)
-  locale        String    @default("fr")
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+Pour éviter de dupliquer la logique de lecture entre RSC et tRPC :
 
-  sessions  Session[]
-  accounts  Account[]
-  operator  Operator?
-  bookings  Booking[]
-}
-// + Session, Account, Verification : générés par `better-auth generate`, ne pas écrire à la main
+```
+server/services/activity.ts   ← la logique vit ici, une seule fois
+        ├── appelée directement par les RSC (pages publiques)
+        └── enveloppée par les routers tRPC (client authentifié)
 ```
 
-Le reste du domaine reprend le modèle validé précédemment — `Operator`, `Activity`, `ActivitySlot`, `Booking`, `Payment`, `ProcessedStripeEvent` — avec ses invariants :
+Les routers tRPC deviennent de fines enveloppes : validation Zod, autorisation, délégation au service. Bénéfice secondaire — les services se testent sans monter de contexte tRPC.
 
-- `ActivitySlot` : `spotsTaken` (compteur croissant), **jamais** `spotsLeft`, plus `CHECK (spots_taken <= max_spots)`.
+---
+
+## 3. Réconciliation du schéma — à traiter en premier
+
+`db/migrations/0001_initial_schema.sql` est **déjà appliquée** en base, et entre en conflit avec la suite :
+
+1. **Better Auth apporte ses propres tables** (`user`, `session`, `account`, `verification`) — ma table `users` fait doublon.
+2. **`prisma migrate` veut être seul maître du schéma.**
+
+**Décision : on repart de Prisma.** La base est vide, le coût est nul. `prisma migrate reset`, puis `prisma/schema.prisma` devient canonique. Le fichier SQL est marqué *superseded* et ne fait plus autorité.
+
+On adopte les conventions Better Auth et on **étend** son modèle. Se battre contre l'adapter à chaque montée de version coûte plus cher que d'accepter ses noms.
+
+### Invariants à porter en base
+
+- `ActivitySlot` : `spotsTaken` (compteur croissant), **jamais** `spotsLeft` — plus `CHECK (spots_taken <= max_spots)`.
 - `Booking` : `CHECK (deposit_due + balance_due_on_site = total_price)`.
-- `BookingStatus` : on **garde les 5 états** (`pending_payment`, `confirmed`, `expired`, `cancelled`, `completed`) même si le paiement est reporté. Ajouter un état plus tard est une migration ; l'omettre maintenant force à réécrire la machine.
+- `BookingStatus` : garder les **5 états** malgré le report du paiement. En ajouter un plus tard est une migration ; l'omettre force à réécrire la machine.
+- `ActivityStatus` : ajouter **`archived`** (voir §7).
 
-> Les `CHECK` ne s'expriment pas en Prisma. Il faut les ajouter à la main dans la migration générée (`prisma migrate dev --create-only`, puis édition du SQL). **C'est l'étape qu'on oublie** — et sans elle, la survente redevient possible.
+> [!WARNING]
+> Les `CHECK` ne s'expriment pas en Prisma — il faut les écrire à la main (`prisma migrate dev --create-only`, puis édition du SQL).
+> **Et `prisma db push` est interdit sur ce projet.** Il court-circuite les migrations et supprimerait ces contraintes sans le dire. Un seul usage et la survente redevient possible, silencieusement.
 
 ---
 
-## 3. Prisma + Neon : le câblage exact
+## 4. Prisma + Neon
 
 ```prisma
 datasource db {
@@ -101,62 +91,64 @@ datasource db {
 }
 ```
 
-`DATABASE_URL` et `DATABASE_URL_UNPOOLED` sont **déjà posées sur Vercel (Production)**. Deux ajustements nécessaires :
+Les deux variables sont **déjà posées sur Vercel (Production)**. Deux ajustements :
 
-1. **La chaîne poolée doit recevoir `?pgbouncer=true&connection_limit=1`.** Sans ça, Prisma prépare des requêtes que PgBouncer ne sait pas gérer en mode transaction → erreurs intermittentes en production, difficiles à diagnostiquer. La valeur actuelle ne les contient pas : à corriger.
-2. **Les variables ne sont pas sur Preview** (choix délibéré : ne pas laisser une preview écrire en prod). Quand il faudra des previews fonctionnelles → une **branche Neon par PR**.
+1. **Ajouter `?pgbouncer=true&connection_limit=1`** à la chaîne poolée. Sans ça, Prisma prépare des requêtes que PgBouncer ne gère pas en mode transaction → erreurs intermittentes en production, pénibles à diagnostiquer. La valeur actuelle ne les contient pas.
+2. Rien sur Preview (délibéré). Le jour où il en faut → **une branche Neon par PR**.
 
-Client Prisma en singleton (`lib/db.ts`) pour survivre au rechargement à chaud en dev et à la réutilisation d'instances Fluid Compute.
+Client Prisma en singleton (`lib/db.ts`).
 
 ---
 
-## 4. tRPC — structure
+## 5. Fuseau horaire — source de bugs silencieux
+
+**Maurice est à UTC+4, sans changement d'heure.**
+
+La base stocke du `timestamptz`, mais `ActivitySlot` expose `date` et `time` comme chaînes séparées. Si le formatage se fait dans le fuseau du navigateur, un touriste à Paris voit un départ de 09:00 affiché **07:00**. Aucune erreur levée — juste une excursion ratée.
+
+**Règle** : tout formatage d'horaire d'activité est épinglé sur `Indian/Mauritius`, jamais sur le fuseau du client. Une seule fonction (`lib/datetime.ts`), utilisée partout, y compris dans les emails. L'absence de DST à Maurice évite au moins les cas limites de bascule.
+
+---
+
+## 6. tRPC — structure
 
 ```
 server/
+  services/            # logique métier, partagée RSC ↔ tRPC
   trpc/
-    init.ts              # contexte, procédures de base, middlewares
-    root.ts              # appRouter
-    routers/
-      activity.ts
-      booking.ts
-      operator.ts
-      admin.ts
-lib/
-  trpc/client.tsx        # provider TanStack Query + client tRPC
+    init.ts            # contexte, procédures, middlewares
+    root.ts
+    routers/           # activity, booking, operator, admin
 ```
-
-### Contexte et procédures
-
-Le contexte porte `{ db, session }`, la session venant de Better Auth (`auth.api.getSession`).
-
-Quatre procédures, chacune un cran plus restrictif :
 
 | Procédure | Garantit |
 |-----------|----------|
 | `publicProcedure` | rien |
-| `protectedProcedure` | `session` non nulle → `ctx.user` typé non-nullable |
+| `protectedProcedure` | `ctx.user` typé non-nullable |
 | `operatorProcedure` | `role = operator` **et** charge `ctx.operator` |
 | `adminProcedure` | `role = admin` |
 
-**C'est le vrai gain de tRPC sur des Route Handlers** : le middleware affine le type du contexte. Dans une `operatorProcedure`, `ctx.operator.id` existe au niveau du type — impossible d'oublier le filtre par inadvertance.
+**C'est le vrai gain de tRPC** : le middleware affine le type du contexte. Dans une `operatorProcedure`, `ctx.operator.id` existe au niveau du type — le filtre ne peut pas être oublié par distraction.
 
-### Routers
-
-**`activity`** — `list` (filtres `ActivityFilters`, pagination), `bySlug`, `slots`.
-**`booking`** — `create`, `myBookings`, `cancel`.
-**`operator`** — `myActivities`, `createActivity`, `updateActivity`, `submitForReview`, `mySlots`, `createSlots`, `myBookings`, `stats`.
-**`admin`** — `pendingActivities`, `moderate`.
-
-> **Règle de sécurité non négociable** : dans tout router `operator`, le filtre `where: { operatorId: ctx.operator.id }` est appliqué **systématiquement**, y compris sur les lectures par id. Un opérateur ne doit jamais pouvoir lire une réservation qui ne lui appartient pas en devinant un UUID.
+> **Règle non négociable** : tout router `operator` applique `where: { operatorId: ctx.operator.id }` **systématiquement**, y compris sur les lectures par id. Un opérateur ne doit jamais lire une réservation d'un autre en devinant un UUID.
 
 ---
 
-## 5. Réservation : la concurrence, sans paiement
+## 7. Rôles, cycles de vie
 
-Même sans Stripe, c'est **le seul endroit où la correction du système est en jeu**. Deux touristes peuvent viser la dernière place à la même milliseconde.
+**Devenir opérateur.** Tout le monde s'inscrit en `tourist`. Un utilisateur demande le statut opérateur (`operator.requestAccess`), un admin valide (`admin.approveOperator`) — ce qui crée l'`Operator` et bascule `role`. *Le rôle vivant dans la session, une promotion ne prend effet qu'à la reconnexion ou au rafraîchissement de session : le prévoir dans l'UX.*
 
-Prisma n'expose pas `SELECT ... FOR UPDATE`. La bonne réponse n'est pas de contourner via `$queryRaw` — c'est un **UPDATE conditionnel atomique** :
+**Premier admin** : créé par le seed, jamais par l'application. Aucun endpoint ne doit pouvoir fabriquer un admin.
+
+**Archiver, ne pas supprimer.** `activities → slots` est en CASCADE et `slots → bookings` en RESTRICT : supprimer une activité réservée casse sur une contrainte de clé étrangère illisible. Les activités passent donc en `archived` — elles disparaissent du catalogue, les réservations passées restent intactes.
+
+---
+
+## 8. Réservation : la concurrence
+
+Même sans paiement, **c'est le seul endroit où la correction du système est en jeu**. Deux touristes peuvent viser la dernière place à la même milliseconde.
+
+Prisma n'expose pas `SELECT ... FOR UPDATE`. La bonne réponse n'est pas de le contourner en `$queryRaw`, c'est un **UPDATE conditionnel atomique** :
 
 ```sql
 UPDATE activity_slots
@@ -165,113 +157,90 @@ UPDATE activity_slots
    AND spots_taken + $participants <= max_spots
 ```
 
-Si `count = 0`, il n'y a plus la place → on renvoie une `TRPCError` `CONFLICT`. Postgres verrouille la ligne implicitement le temps de l'`UPDATE` : pas de verrou explicite, pas d'interblocage possible, un seul aller-retour. Plus simple **et** plus solide que `FOR UPDATE`.
+`count = 0` ⇒ plus de place ⇒ `TRPCError` `CONFLICT`. Postgres verrouille la ligne implicitement : pas de verrou explicite, pas d'interblocage, un seul aller-retour. Plus simple **et** plus solide que `FOR UPDATE`.
 
-Le tout dans un `prisma.$transaction` :
+Dans un `prisma.$transaction` :
 
 ```
-1. lire l'activité (prix serveur — jamais celui envoyé par le client)
-2. UPDATE conditionnel sur le créneau  → 0 ligne ⇒ CONFLICT
+1. lire l'activité (prix serveur — jamais celui du client)
+2. UPDATE conditionnel  → 0 ligne ⇒ CONFLICT
 3. calculer les montants (RULE-001 : acompte 20 %)
-4. créer le Booking en status = confirmed   ← sans paiement, pas d'état intermédiaire
+4. créer le Booking en status = confirmed
 ```
 
-Trois points qui restent vrais même sans Stripe :
+**L'annulation doit rendre les places.** `booking.cancel` décrémente `spotsTaken` **dans la même transaction** que le passage à `cancelled`. Une annulation qui ne libère pas les places fait fuir l'inventaire définitivement : les créneaux se remplissent d'annulations et ne se revendent jamais. Même exigence future pour l'expiration.
 
-- **Le montant est recalculé côté serveur**, depuis `activity.priceHt`. Ne jamais faire confiance à un prix venu du client, même avec Zod : Zod valide la *forme*, pas la *véracité*.
-- **`bookingRef`** (`MX-2026-000123`) : une séquence Postgres, pas un `count()+1` — qui produit des doublons en concurrence.
-- **`CHECK (spots_taken <= max_spots)`** reste le filet. Si un jour une requête oublie la condition, la base refuse quand même.
+Trois points qui restent vrais sans Stripe :
 
-Quand Stripe arrivera, le seul changement est l'état initial (`pending_payment` + `expiresAt`) et le webhook qui confirme. La transaction d'inventaire, elle, ne bouge pas — c'est pourquoi elle vaut d'être faite correctement maintenant.
+- **Le montant est recalculé côté serveur.** Zod valide la *forme*, pas la *véracité* : ne jamais faire confiance à un prix venu du client.
+- **`bookingRef`** via une séquence Postgres (SQL brut dans la migration), pas un `count()+1` — qui produit des doublons en concurrence.
+- **`CHECK (spots_taken <= max_spots)`** reste le filet si une requête oublie un jour la condition.
 
----
-
-## 6. Better Auth
-
-`lib/auth.ts` : adapter Prisma, plus
-
-- **Social** : Google, Apple. *(Apple exige un compte développeur payant et une clé signée — prévoir le délai administratif, ce n'est pas une case à cocher.)*
-- **Magic link** : via Resend.
-- **Email + mot de passe** : activé, avec vérification d'email.
-- **`additionalFields`** : `role`, `locale` — c'est ce qui met le rôle *dans la session*, et évite un aller-retour base à chaque requête tRPC.
-
-Tu hésitais entre magic link et mot de passe : **les deux peuvent coexister**, Better Auth le gère nativement. Mon conseil — ouvrir avec Google + magic link, et n'activer le mot de passe que si les retours le réclament. Chaque méthode ajoutée est une surface à sécuriser (reset, énumération de comptes, robustesse).
-
-`middleware.ts` protège `/account`, `/bookings`, `/checkout`, `/operator/*` — **mais le middleware n'est qu'un confort UX**. La vraie autorisation est dans les procédures tRPC. Un middleware ne protège pas un appel d'API direct.
+> [!CAUTION]
+> **Sans paiement, plus rien ne freine la réservation.** L'acompte de 20 % n'est pas qu'un modèle économique, c'est le mécanisme anti-abus : n'importe quel compte peut aujourd'hui verrouiller tous les créneaux gratuitement.
+> Acceptable avant lancement, **dangereux le jour de la mise en ligne**. À ne pas laisser passer en production sans soit Stripe, soit une limite par utilisateur et par créneau.
 
 ---
 
-## 7. Zod : un schéma, trois usages
+## 9. Better Auth
 
-Les schémas vivent dans `lib/schemas/` et servent à la fois d'**input tRPC**, de **resolver `react-hook-form`** (`ActivityForm.tsx`, `AuthForm.tsx` sont déjà branchés dessus) et de source de types.
+Adapter Prisma, plus :
 
-Les types de `types/activity.ts` et `types/cart.ts` restent le **contrat de sortie** : les routers renvoient exactement `Activity`, `ActivityFull`, `Booking`. Ça garantit que les composants ne bougent pas.
+- **Social** : Google, Apple. *(Apple exige un compte développeur payant et une clé signée — délai administratif, pas une case à cocher.)*
+- **Magic link** via Resend, **email + mot de passe** avec vérification.
+- **`additionalFields`** : `role`, `locale` — met le rôle dans la session, évite un aller-retour base par requête.
 
-Deux points de vigilance :
+Magic link et mot de passe **coexistent** nativement. Conseil : ouvrir avec Google + magic link, n'activer le mot de passe que si les retours le réclament — chaque méthode ajoute une surface à sécuriser (reset, énumération de comptes).
 
-- **`description` multilingue** : valider les 5 clés `fr|en|de|es|ru` à l'écriture. Un objet partiel casse l'affichage sans erreur explicite.
-- **`spotsLeft` vs `spotsTaken`** : la base stocke `spotsTaken`, le front lit `spotsLeft`. La conversion se fait dans **une seule** fonction de mapping (`server/mappers/activity.ts`). Dupliquée, elle divergera.
-- **`priceFrom` est dérivé**, jamais stocké.
-
----
-
-## 8. Migration du front
-
-Ordre imposé par les dépendances :
-
-1. `useActivities` → `trpc.activity.list.useQuery()`. **La signature du hook ne change pas** : les composants ne sont pas touchés. C'est ce qui rend la bascule indolore et réversible.
-2. `useCart` : le panier **reste en localStorage**. Il ne devient serveur qu'au moment de `booking.create`. Persister un panier anonyme n'apporte rien au MVP.
-3. Les pages opérateur passent sur `trpc.operator.*`.
+`middleware.ts` protège les routes privées, **mais ce n'est qu'un confort UX**. La vraie autorisation est dans les procédures tRPC : un middleware ne protège pas un appel d'API direct.
 
 ---
 
-## 9. Variables d'environnement
+## 10. Zod & contrats
 
-```
-DATABASE_URL=              # ✅ posée — à compléter avec ?pgbouncer=true&connection_limit=1
-DATABASE_URL_UNPOOLED=     # ✅ posée
-BETTER_AUTH_SECRET=
-BETTER_AUTH_URL=
-GOOGLE_CLIENT_ID= / GOOGLE_CLIENT_SECRET=
-APPLE_CLIENT_ID= / APPLE_CLIENT_SECRET=
-RESEND_API_KEY=
-BLOB_READ_WRITE_TOKEN=
-NEXT_PUBLIC_SITE_URL=      # corrige aussi le warning metadataBase du build
-```
+Schémas dans `lib/schemas/`, servant à la fois d'**input tRPC**, de **resolver `react-hook-form`** (déjà en place dans `ActivityForm.tsx`, `AuthForm.tsx`) et de source de types.
+
+`types/activity.ts` et `types/cart.ts` restent le **contrat de sortie** : les services renvoient exactement `Activity`, `ActivityFull`, `Booking`.
+
+- **`description` multilingue** : valider les 5 clés `fr|en|de|es|ru`. Un objet partiel casse l'affichage sans erreur.
+- **`spotsLeft` vs `spotsTaken`** : conversion dans **une seule** fonction de mapping. Dupliquée, elle divergera.
+- **`priceFrom`** est dérivé, jamais stocké.
 
 ---
 
-## 10. Découpage
+## 11. Découpage
 
-| # | Lot | Contenu | Sortie vérifiable |
-|---|-----|---------|-------------------|
-| 1 | **Fondations** | `migrate reset`, `schema.prisma`, CHECK à la main, singleton client | `prisma migrate status` propre, contraintes présentes |
-| 2 | **Seed** | `MOCK_ACTIVITIES` → `prisma/seed.ts` (+ users/operators associés) | les données du front existent en base |
-| 3 | **tRPC** | init, contexte, 4 procédures, `appRouter`, provider client | un `activity.list` répond bout en bout |
-| 4 | **Lecture** | router `activity`, mappers, bascule `useActivities` | `/activities` et `/activities/[slug]` servis par la base |
-| 5 | **Auth** | Better Auth, middleware, `AuthForm` | connexion Google + magic link, rôle en session |
-| 6 | **Réservation** | `booking.create` (transaction §5), `myBookings`, `cancel` | test de concurrence : N réservations simultanées sur 1 place ⇒ 1 seule passe |
-| 7 | **Opérateur** | CRUD activités, créneaux, upload Blob, stats | un opérateur ne voit que ses données |
-| 8 | **Admin** | modération | `draft → pending → published` |
+| # | Lot | Sortie vérifiable |
+|---|-----|-------------------|
+| 1 | **Fondations** — `migrate reset`, schéma, CHECK manuels, singleton | `migrate status` propre, contraintes présentes |
+| 2 | **Seed** — mocks → `prisma/seed.ts` (+ admin, opérateurs) | les données du front existent en base |
+| 3 | **Services + tRPC** — couche service, init, 4 procédures | `activity.list` répond bout en bout |
+| 4 | **Lecture publique** — RSC sur `/`, `/activities`, `/[slug]` | **le HTML servi contient les titres d'activités** |
+| 5 | **Auth** — Better Auth, middleware, `AuthForm` | Google + magic link, rôle en session |
+| 6 | **Réservation** — création, annulation avec libération | N réservations parallèles sur 1 place ⇒ 1 seule passe |
+| 7 | **Opérateur** — CRUD, créneaux, Blob, stats, demande d'accès | un opérateur ne voit que ses données |
+| 8 | **Admin** — modération, validation opérateurs | `draft → pending → published` |
 
 > **Le lot 2 avant le 3, toujours.** Sans données en base, on ne distingue pas un router cassé d'une base vide.
 
 ### Tests qui valent l'effort
 
-Peu, mais ceux-là :
-
-- **Concurrence sur `booking.create`** — N appels parallèles sur un créneau à 1 place. C'est le seul bug de cette itération qui produit une survente réelle, et il est invisible en test manuel.
-- **RULE-001** — les scénarios Gherkin de `docs/TEST-reservation-flow.md` (100 € × 2 ⇒ total 200, acompte 40, solde 160).
-- **Cloisonnement opérateur** — l'opérateur A ne peut pas lire une réservation de l'opérateur B via son id.
+- **Concurrence sur `booking.create`** — N appels parallèles sur un créneau à 1 place. Seul bug de cette itération produisant une survente réelle, et invisible en test manuel.
+- **Annulation** — après annulation, la place est bien revendable.
+- **RULE-001** — Gherkin de `docs/TEST-reservation-flow.md` (100 € × 2 ⇒ 200 / 40 / 160).
+- **Cloisonnement opérateur** — A ne peut pas lire une réservation de B via son id.
+- **Rendu SEO** — le HTML de `/activities` contient les titres. Un test qui aurait attrapé le défaut actuel.
 
 ---
 
-## 11. Reporté — et pourquoi c'est acceptable
+## 12. Reporté
 
-**Paiement Stripe.** Le schéma garde `pending_payment`, `expiresAt`, `Payment`, `ProcessedStripeEvent`. Rien à re-migrer le moment venu.
+**Paiement Stripe.** Le schéma garde `pending_payment`, `expiresAt`, `Payment`, `ProcessedStripeEvent` : rien à re-migrer.
 
-**Reversements opérateurs.** ⚠️ **Maurice ne figure pas dans les pays supportés par Stripe.** Stripe Connect est donc probablement inutilisable pour payer les opérateurs mauriciens. **À vérifier avant tout engagement sur le modèle de payout** — si c'est confirmé, il faudra soit un PSP local (MIPS), soit des virements hors plateforme. `/operator/wallet` reste un relevé en lecture d'ici là.
+**Reversements opérateurs.** ⚠️ **Maurice ne figure pas dans les pays supportés par Stripe** — Connect est probablement inutilisable pour payer les opérateurs mauriciens. **À vérifier avant tout engagement sur le modèle de payout** : si confirmé, il faudra un PSP local (MIPS) ou des virements hors plateforme. `/operator/wallet` reste un relevé en lecture.
 
-**`next-intl`.** Prévu dans `ARCHITECTURE.md` mais non installé. Le routing localisé change les URLs — donc le SEO et les slugs. À trancher avant de multiplier les pages.
+**`next-intl`.** Prévu dans `ARCHITECTURE.md`, non installé. Le routing localisé change les URLs — donc le SEO et les slugs. À trancher avant de multiplier les pages.
 
-**Hors périmètre produit** : avis, messagerie touriste↔opérateur, remboursements partiels, multi-devises (tout est en EUR), blog/landing SEO.
+**Avis clients.** `rating` / `reviewCount` existent en schéma mais ne sont alimentés par rien — le seed les fixe en dur. Colonnes en attente, à ne pas confondre avec une fonctionnalité.
+
+**Hors périmètre** : messagerie touriste↔opérateur, remboursements partiels, multi-devises (tout en EUR), blog/landing SEO.
