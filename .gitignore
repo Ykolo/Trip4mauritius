@@ -19,3 +19,6 @@ build.log
 .vercel
 .env*
 tsconfig.tsbuildinfo
+
+# Le gabarit est versionné, les vrais .env non
+!.env.example

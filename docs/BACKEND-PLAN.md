@@ -91,12 +91,28 @@ datasource db {
 }
 ```
 
-Les deux variables sont **déjà posées sur Vercel (Production)**. Deux ajustements :
+> [!NOTE]
+> **Correction par rapport aux versions précédentes de ce plan.** Prisma 7 a supprimé `url`/`directUrl` du schéma : les URLs vivent dans `prisma.config.ts` (CLI, endpoint direct) et dans le driver adapter (runtime, endpoint poolé).
+> Du coup le conseil `?pgbouncer=true&connection_limit=1` **ne s'applique plus** : il visait l'ancien moteur Prisma et ses requêtes préparées, pas le driver adapter. Ne pas le reporter par habitude.
+> Le `sslmode` est en revanche explicitement `verify-full` : `pg` avertit que `require` perdra ses garanties dans une version majeure future.
 
-1. **Ajouter `?pgbouncer=true&connection_limit=1`** à la chaîne poolée. Sans ça, Prisma prépare des requêtes que PgBouncer ne gère pas en mode transaction → erreurs intermittentes en production, pénibles à diagnostiquer. La valeur actuelle ne les contient pas.
-2. Rien sur Preview (délibéré). Le jour où il en faut → **une branche Neon par PR**.
+### Séparation dev / production
+
+| Branche Neon | Usage | Qui la vise |
+|---|---|---|
+| `main` (`br-winter-rice-…`) | production | variables posées sur Vercel |
+| `dev` (`br-holy-tooth-…`) | développement local | `.env` (gitignoré) |
+
+**C'est une protection, pas un confort.** `prisma migrate dev`, `migrate reset` et le seed sont destructifs ; tant que le `.env` local pointait sur la production, une commande malheureuse détruisait de vraies données. Une branche Neon est une copie instantanée en copy-on-write : gratuite, et isolée en écriture.
+
+Pour resynchroniser dev sur la production : `reset_from_parent` côté Neon.
+Rien n'est posé sur Preview (délibéré) — le jour où il en faut, **une branche Neon par PR**.
 
 Client Prisma en singleton (`lib/db.ts`).
+
+### Migrations au déploiement
+
+`npm run build` exécute `prisma migrate deploy && next build` : un déploiement ne peut donc pas livrer du code dont le schéma n'est pas appliqué. Sans ça, l'écart entre migrations et production ne se révèle qu'au runtime.
 
 ---
 
