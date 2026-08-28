@@ -1,5 +1,6 @@
 import { initTRPC, TRPCError } from '@trpc/server'
 import type { UserRole } from '@prisma/client'
+import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 
 // Contexte et procédures tRPC.
@@ -23,13 +24,26 @@ export type TRPCContext = {
 }
 
 /**
- * TODO(lot 5) — brancher Better Auth : `auth.api.getSession({ headers })`.
- * Renvoie null d'ici là, ce qui fait légitimement échouer toute procédure
- * protégée. C'est le comportement correct : mieux vaut tout refuser que
- * laisser passer avec une session factice.
+ * Session lue depuis Better Auth.
+ *
+ * Le rôle vient de la session (additionalFields) et non d'une requête base à
+ * chaque appel. Contrepartie assumée : une promotion opérateur/admin ne prend
+ * effet qu'au rafraîchissement du cache de session (5 min, cf. lib/auth.ts).
  */
-async function getSessionUser(_headers: Headers): Promise<SessionUser | null> {
-  return null
+async function getSessionUser(headers: Headers): Promise<SessionUser | null> {
+  const session = await auth.api.getSession({ headers })
+  if (!session?.user) return null
+
+  const user = session.user as typeof session.user & { role?: UserRole }
+
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    // Repli sur `tourist` : un rôle absent ne doit jamais être interprété
+    // comme un privilège.
+    role: user.role ?? 'tourist',
+  }
 }
 
 export async function createTRPCContext(opts: {

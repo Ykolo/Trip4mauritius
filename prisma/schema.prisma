@@ -66,7 +66,11 @@ model Session {
 }
 
 model Account {
-  id                    String    @id @default(cuid())
+  id String @id @default(cuid())
+  // Requis par Better Auth >= 1.7. Le CLI @better-auth/cli est bloqué en 1.4 et
+  // ne le connaît pas : il valide un schéma que la librairie rejette ensuite au
+  // runtime. Ne pas se fier au CLI seul pour vérifier ce modèle.
+  issuer                String
   accountId             String
   providerId            String
   userId                String
