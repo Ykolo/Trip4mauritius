@@ -3,6 +3,7 @@ import { Pacifico, Poppins } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import { ServiceWorkerInit } from "@/components/layout/ServiceWorkerInit";
+import { TRPCReactProvider } from "@/lib/trpc/client";
 
 const pacifico = Pacifico({
   weight: "400",
@@ -18,7 +19,17 @@ const poppins = Poppins({
   display: "swap",
 });
 
+// Sans metadataBase, les images Open Graph se résolvent sur localhost:3000 —
+// donc aucun aperçu au partage d'un lien, ce qui compte pour une PWA dont
+// l'acquisition passe par le partage et la recherche.
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : "http://localhost:3000");
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "Trip4mauritius - Discover Mauritius",
   description:
     "Luxury tourism marketplace for Mauritius. Discover and book amazing activities, tours, and experiences on the beautiful island of Mauritius.",
@@ -61,7 +72,9 @@ export default function RootLayout({
     <html lang="en" className={`${pacifico.variable} ${poppins.variable}`}>
       <body className="font-sans antialiased bg-base text-ink">
         <ServiceWorkerInit />
-        <main className="min-h-screen">{children}</main>
+        <TRPCReactProvider>
+          <main className="min-h-screen">{children}</main>
+        </TRPCReactProvider>
         {process.env.NODE_ENV === "production" && <Analytics />}
       </body>
     </html>
