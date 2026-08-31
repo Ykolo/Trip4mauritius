@@ -1,14 +1,49 @@
 'use client'
 
-import { useState, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useState, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
-import { useLogin, useRegister } from '@/lib/hooks/useCart'
+import { authClient } from '@/lib/auth-client'
 
 interface AuthFormProps {
   defaultTab: 'login' | 'register'
+  /**
+   * `bare` quand le conteneur parent fournit déjà la carte — c'est le cas du
+   * layout `(auth)`. Sinon on empilerait deux cartes l'une dans l'autre.
+   */
+  variant?: 'card' | 'bare'
 }
+
+const CARD_CLASSNAME = 'bg-white rounded-2xl shadow-card p-8 w-full max-w-md mx-auto'
+
+/**
+ * `useSearchParams` impose une frontière Suspense : sans elle, le prérendu
+ * statique de `/login` et `/register` échoue au build. La poser ici plutôt que
+ * chez chaque appelant évite qu'un futur appelant l'oublie.
+ */
+export function AuthForm(props: AuthFormProps) {
+  return (
+    <Suspense
+      fallback={
+        <div className={props.variant === 'bare' ? 'w-full' : CARD_CLASSNAME}>
+          <div className="animate-pulse space-y-4">
+            <div className="h-11 bg-surface rounded-xl" />
+            <div className="h-12 bg-surface rounded-2xl" />
+            <div className="h-12 bg-surface rounded-2xl" />
+            <div className="h-12 bg-surface/70 rounded-2xl" />
+          </div>
+        </div>
+      }
+    >
+      <AuthFormInner {...props} />
+    </Suspense>
+  )
+}
+
+// Aligné sur `minPasswordLength` de lib/auth.ts. Une jauge plus permissive que
+// le serveur promettrait un mot de passe que l'inscription refuserait ensuite.
+const MIN_PASSWORD_LENGTH = 12
 
 function getPasswordStrength(password: string): {
   score: number
@@ -16,7 +51,7 @@ function getPasswordStrength(password: string): {
   color: string
 } {
   let score = 0
-  if (password.length >= 8) score++
+  if (password.length >= MIN_PASSWORD_LENGTH) score++
   if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++
   if (/\d/.test(password)) score++
   if (/[^a-zA-Z0-9]/.test(password)) score++
@@ -31,43 +66,85 @@ function getPasswordStrength(password: string): {
   return { score, ...levels[Math.min(score, 3)] }
 }
 
-export function AuthForm({ defaultTab }: AuthFormProps) {
-  const router = useRouter()
+/**
+ * Destination après connexion, posée par le middleware. Elle vient de l'URL,
+ * donc d'une source non fiable : seul un chemin interne est accepté, sans quoi
+ * `?redirect=//evil.com` renverrait l'utilisateur hors du site juste après
+ * s'être authentifié.
+ */
+function safeRedirect(target: string | null): string {
+  if (!target || !target.startsWith('/') || target.startsWith('//')) {
+    return '/account'
+  }
+  return target
+}
+
+function AuthFormInner({ defaultTab, variant = 'card' }: AuthFormProps) {
+  const searchParams = useSearchParams()
+  const redirectTo = safeRedirect(searchParams.get('redirect'))
   const [tab, setTab] = useState<'login' | 'register'>(defaultTab)
 
   // Login state
   const [loginEmail, setLoginEmail] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
   const [showLoginPassword, setShowLoginPassword] = useState(false)
-  const login = useLogin()
+  const [loginPending, setLoginPending] = useState(false)
+  const [loginError, setLoginError] = useState<string | null>(null)
 
   // Register state
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [registerEmail, setRegisterEmail] = useState('')
-  const [phone, setPhone] = useState('')
   const [registerPassword, setRegisterPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showRegisterPassword, setShowRegisterPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [role, setRole] = useState<'tourist' | 'operator'>('tourist')
   const [agreeTerms, setAgreeTerms] = useState(false)
+  const [registerPending, setRegisterPending] = useState(false)
   const [registerError, setRegisterError] = useState<string | null>(null)
-  const register = useRegister()
 
   const passwordStrength = getPasswordStrength(registerPassword)
+
+  /**
+   * Navigation dure, volontairement.
+   *
+   * La session vit dans un cookie : tous les composants serveur déjà rendus
+   * l'ignorent. Un `router.refresh()` les réinvaliderait, mais il rafraîchit la
+   * route *courante* — ici `/login`, où le proxy voit maintenant une session et
+   * applique sa règle « déjà connecté → /account ». Cette redirection gagnait
+   * la course contre le `push`, et `?redirect=/bookings` était perdu.
+   *
+   * Recharger la page évite la course et garantit que tout est re-rendu avec le
+   * nouveau cookie. Le coût d'un chargement complet est acceptable ici : ça
+   * n'arrive qu'une fois, au moment de l'authentification.
+   */
+  const goAfterAuth = useCallback(() => {
+    window.location.assign(redirectTo)
+  }, [redirectTo])
 
   const handleLogin = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault()
-      try {
-        await login.mutateAsync({ email: loginEmail, password: loginPassword })
-        router.push('/account')
-      } catch {
-        // Error is handled by the hook
+      setLoginError(null)
+      setLoginPending(true)
+
+      const { error } = await authClient.signIn.email({
+        email: loginEmail,
+        password: loginPassword,
+      })
+
+      setLoginPending(false)
+
+      if (error) {
+        // Message volontairement identique pour un email inconnu et un mot de
+        // passe faux : distinguer les deux permettrait d'énumérer les comptes.
+        setLoginError(error.message ?? 'Invalid email or password')
+        return
       }
+
+      goAfterAuth()
     },
-    [login, loginEmail, loginPassword, router]
+    [loginEmail, loginPassword, goAfterAuth]
   )
 
   const handleRegister = useCallback(
@@ -85,36 +162,39 @@ export function AuthForm({ defaultTab }: AuthFormProps) {
         return
       }
 
-      try {
-        await register.mutateAsync({
-          firstName,
-          lastName,
-          email: registerEmail,
-          phone,
-          password: registerPassword,
-          role,
-        })
-        router.push('/account')
-      } catch {
-        // Error is handled by the hook
+      setRegisterPending(true)
+
+      // Le rôle n'est pas envoyé : il est en `input: false` côté Better Auth et
+      // serait ignoré. Tout le monde s'inscrit en `tourist`, le statut
+      // opérateur se demande ensuite et se valide par un admin (lots 7 et 8).
+      const { error } = await authClient.signUp.email({
+        name: `${firstName.trim()} ${lastName.trim()}`.trim(),
+        email: registerEmail,
+        password: registerPassword,
+      })
+
+      setRegisterPending(false)
+
+      if (error) {
+        setRegisterError(error.message ?? 'Could not create your account')
+        return
       }
+
+      goAfterAuth()
     },
     [
-      register,
       firstName,
       lastName,
       registerEmail,
-      phone,
       registerPassword,
       confirmPassword,
-      role,
       agreeTerms,
-      router,
+      goAfterAuth,
     ]
   )
 
   return (
-    <div className="bg-white rounded-2xl shadow-card p-8 w-full max-w-md mx-auto">
+    <div className={variant === 'bare' ? 'w-full' : CARD_CLASSNAME}>
       {/* Tab Switcher */}
       <div className="flex mb-6 bg-surface rounded-xl p-1">
         <button
@@ -204,16 +284,16 @@ export function AuthForm({ defaultTab }: AuthFormProps) {
             </Link>
           </div>
 
-          {login.error && (
-            <p className="text-red-500 text-sm">{login.error}</p>
+          {loginError && (
+            <p className="text-red-500 text-sm">{loginError}</p>
           )}
 
           <button
             type="submit"
-            disabled={login.isPending}
+            disabled={loginPending}
             className="w-full bg-primary text-white font-semibold py-3 rounded-2xl active:scale-95 transition-transform disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            {login.isPending ? (
+            {loginPending ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
                 Signing in...
@@ -288,25 +368,6 @@ export function AuthForm({ defaultTab }: AuthFormProps) {
 
           <div>
             <label
-              htmlFor="phone"
-              className="block text-sm font-medium text-ink mb-1.5"
-            >
-              Phone
-            </label>
-            <input
-              id="phone"
-              type="tel"
-              autoComplete="tel"
-              required
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="w-full px-4 py-3 rounded-2xl border border-surface focus:border-primary focus:outline-none transition-colors"
-              placeholder="+230 5XXX XXXX"
-            />
-          </div>
-
-          <div>
-            <label
               htmlFor="register-password"
               className="block text-sm font-medium text-ink mb-1.5"
             >
@@ -318,11 +379,11 @@ export function AuthForm({ defaultTab }: AuthFormProps) {
                 type={showRegisterPassword ? 'text' : 'password'}
                 autoComplete="new-password"
                 required
-                minLength={8}
+                minLength={MIN_PASSWORD_LENGTH}
                 value={registerPassword}
                 onChange={(e) => setRegisterPassword(e.target.value)}
                 className="w-full px-4 py-3 pr-12 rounded-2xl border border-surface focus:border-primary focus:outline-none transition-colors"
-                placeholder="Create a password"
+                placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
               />
               <button
                 type="button"
@@ -388,23 +449,10 @@ export function AuthForm({ defaultTab }: AuthFormProps) {
             </div>
           </div>
 
-          <div>
-            <label
-              htmlFor="role"
-              className="block text-sm font-medium text-ink mb-1.5"
-            >
-              I am a...
-            </label>
-            <select
-              id="role"
-              value={role}
-              onChange={(e) => setRole(e.target.value as 'tourist' | 'operator')}
-              className="w-full px-4 py-3 rounded-2xl border border-surface focus:border-primary focus:outline-none transition-colors bg-white"
-            >
-              <option value="tourist">Tourist</option>
-              <option value="operator">Activity Operator</option>
-            </select>
-          </div>
+          <p className="text-sm text-muted">
+            Running activities in Mauritius? Create your account first — operator
+            access is requested from your account and approved by our team.
+          </p>
 
           <label className="flex items-start gap-3 cursor-pointer">
             <input
@@ -421,18 +469,16 @@ export function AuthForm({ defaultTab }: AuthFormProps) {
             </span>
           </label>
 
-          {(registerError || register.error) && (
-            <p className="text-red-500 text-sm">
-              {registerError || register.error}
-            </p>
+          {registerError && (
+            <p className="text-red-500 text-sm">{registerError}</p>
           )}
 
           <button
             type="submit"
-            disabled={register.isPending}
+            disabled={registerPending}
             className="w-full bg-primary text-white font-semibold py-3 rounded-2xl active:scale-95 transition-transform disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            {register.isPending ? (
+            {registerPending ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
                 Creating account...

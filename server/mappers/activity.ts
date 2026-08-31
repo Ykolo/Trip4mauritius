@@ -4,6 +4,7 @@ import type {
   Operator as DbOperator,
 } from '@prisma/client'
 import { mauritiusDate, mauritiusTime } from '@/lib/datetime'
+import { ACTIVITY_LOCALES } from '@/lib/schemas/activity'
 import type {
   Activity,
   ActivityFull,
@@ -25,6 +26,24 @@ export function toActivitySlot(slot: DbSlot): ActivitySlot {
     spotsLeft: slot.maxSpots - slot.spotsTaken,
     maxSpots: slot.maxSpots,
   }
+}
+
+/**
+ * Complète les langues manquantes à partir du français.
+ *
+ * La base ne stocke que les traductions réellement saisies (cf.
+ * `activityDescriptionSchema`). Le contrat de sortie, lui, promet les 5 clés :
+ * c'est ce repli qui tient la promesse, et il n'existe qu'ici. Dupliqué dans
+ * les composants, il finirait par manquer sur l'un d'eux et afficherait du
+ * vide.
+ */
+export function toDescription(raw: unknown): ActivityFull['description'] {
+  const stored = (raw ?? {}) as Partial<Record<string, string>>
+  const fallback = stored.fr ?? ''
+
+  return Object.fromEntries(
+    ACTIVITY_LOCALES.map((locale) => [locale, stored[locale] || fallback]),
+  ) as ActivityFull['description']
 }
 
 export function toActivityOperator(operator: DbOperator): ActivityOperator {
@@ -60,8 +79,7 @@ export function toActivityFull(
     maxParticipants: activity.maxParticipants,
     languages: activity.languages,
     imageUrls: activity.imageUrls,
-    // Les 5 clés fr|en|de|es|ru sont garanties à l'écriture (validation Zod).
-    description: activity.description as ActivityFull['description'],
+    description: toDescription(activity.description),
     included: activity.included,
     excluded: activity.excluded,
     operator: toActivityOperator(activity.operator),

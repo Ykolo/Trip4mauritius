@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { AuthForm } from '@/components/forms/AuthForm'
 
 export const metadata = {
@@ -6,13 +5,8 @@ export const metadata = {
   description: 'Create your Trip4mauritius account to book amazing activities in Mauritius.',
 }
 
+// Idem `/login` : le layout `(auth)` porte le logo et la carte. La version
+// précédente rouvrait un `min-h-screen` et un second logo à l'intérieur.
 export default function RegisterPage() {
-  return (
-    <div className="min-h-screen bg-base flex flex-col items-center justify-center px-4 py-12">
-      <Link href="/" className="mb-8">
-        <h1 className="font-display text-primary text-3xl">Trip4mauritius</h1>
-      </Link>
-      <AuthForm defaultTab="register" />
-    </div>
-  )
+  return <AuthForm defaultTab="register" variant="bare" />
 }

@@ -3,7 +3,7 @@ import type { Metadata } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { PriceBreakdownWrapper as PriceBreakdown } from '@/components/ui/PriceBreakdownWrapper'
+import { PriceBreakdownWrapper as BookingPanel } from '@/components/ui/PriceBreakdownWrapper'
 import { getActivityBySlug } from '@/server/services/activity'
 
 // Composant SERVEUR alimenté par la base.
@@ -53,7 +53,6 @@ export default async function ActivityDetailedPage({
   if (!activity) notFound()
 
   const images = activity.imageUrls.length > 0 ? activity.imageUrls : [FALLBACK_IMAGE]
-  const firstSlot = activity.slots[0] ?? null
 
   return (
     <div className="pb-8">
@@ -192,14 +191,7 @@ export default async function ActivityDetailedPage({
                 </p>
                 <h3 className="text-2xl font-display text-ink">Votre sélection</h3>
               </div>
-              <div className="p-2">
-                <PriceBreakdown
-                  priceHT={activity.priceHT}
-                  maxParticipants={activity.maxParticipants}
-                  selectedSlotId={firstSlot?.id ?? null}
-                  activityId={activity.id}
-                />
-              </div>
+              <BookingPanel activity={activity} />
             </div>
           </div>
         </aside>

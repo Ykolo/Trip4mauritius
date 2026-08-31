@@ -3,97 +3,15 @@
 import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { LogOut, Calendar, Users, Loader2 } from 'lucide-react'
-import {
-  useAuth,
-  useLogout,
-  useUpdateProfile,
-  useMyBookings,
-  type User,
-} from '@/lib/hooks/useCart'
+import { LogOut, Loader2 } from 'lucide-react'
+import { useAuth, useLogout, type AuthUser } from '@/lib/hooks/useAuth'
+import { useMyBookings } from '@/lib/hooks/useBookings'
+import { authClient } from '@/lib/auth-client'
 import { AuthForm } from '@/components/forms/AuthForm'
+import { BookingCard } from '@/components/ui/BookingCard'
 import { SkeletonCard } from '@/components/ui/SkeletonCard'
-import type { Booking } from '@/types/cart'
 
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('en-GB', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  })
-}
-
-function StatusBadge({ status }: { status: Booking['status'] }) {
-  const styles = {
-    confirmed: 'bg-green-100 text-green-800',
-    pending: 'bg-amber-100 text-amber-800',
-    cancelled: 'bg-red-100 text-red-800',
-  }
-
-  const labels = {
-    confirmed: 'Confirmed',
-    pending: 'Pending',
-    cancelled: 'Cancelled',
-  }
-
-  return (
-    <span
-      className={`px-3 py-1 rounded-full text-xs font-medium ${styles[status]}`}
-    >
-      {labels[status]}
-    </span>
-  )
-}
-
-function BookingCard({ booking }: { booking: Booking }) {
-  return (
-    <div className="bg-white rounded-2xl shadow-card p-5">
-      <div className="flex items-start justify-between mb-3">
-        <div>
-          <h3 className="font-semibold text-ink">{booking.activityName}</h3>
-          <p className="text-xs font-mono text-muted mt-1">
-            {booking.bookingRef}
-          </p>
-        </div>
-        <StatusBadge status={booking.status} />
-      </div>
-
-      <div className="flex flex-wrap gap-4 text-sm text-muted mb-4">
-        <div className="flex items-center gap-1.5">
-          <Calendar className="w-4 h-4" />
-          <span>
-            {formatDate(booking.date)} at {booking.time}
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Users className="w-4 h-4" />
-          <span>{booking.participants} participant(s)</span>
-        </div>
-      </div>
-
-      <div className="flex justify-between pt-3 border-t border-surface">
-        <div>
-          <p className="text-xs text-muted">Deposit paid</p>
-          <p className="text-accent font-semibold">
-            &euro;{booking.depositPaid}
-          </p>
-        </div>
-        {booking.balanceDue > 0 && (
-          <div className="text-right">
-            <p className="text-xs text-muted">Balance due</p>
-            <p className="text-ink font-semibold">
-              &euro;{booking.balanceDue}
-            </p>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function RoleBadge({ role }: { role: User['role'] }) {
+function RoleBadge({ role }: { role: AuthUser['role'] }) {
   const styles = {
     tourist: 'bg-primary/10 text-primary',
     operator: 'bg-accent/10 text-accent',
@@ -115,26 +33,33 @@ function RoleBadge({ role }: { role: User['role'] }) {
   )
 }
 
-function ProfileHeader({ user }: { user: User }) {
-  const initials = `${user.firstName[0]}${user.lastName[0]}`.toUpperCase()
+/** Deux premières lettres des mots du nom — `name` est un champ libre, il peut
+ *  ne contenir qu'un seul mot. */
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  const letters = parts.length === 1 ? parts[0].slice(0, 2) : parts[0][0] + parts[1][0]
+  return letters.toUpperCase()
+}
 
+function ProfileHeader({ user }: { user: AuthUser }) {
   return (
     <div className="rounded-2xl shadow-card bg-white p-6 flex gap-4">
-      {user.avatarUrl ? (
+      {user.image ? (
         <img
-          src={user.avatarUrl}
-          alt={`${user.firstName} ${user.lastName}`}
+          src={user.image}
+          alt={user.name}
           className="w-16 h-16 rounded-full object-cover"
         />
       ) : (
         <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center">
-          <span className="text-primary font-bold text-xl">{initials}</span>
+          <span className="text-primary font-bold text-xl">
+            {getInitials(user.name)}
+          </span>
         </div>
       )}
       <div className="flex-1">
-        <h2 className="font-semibold text-xl text-ink">
-          {user.firstName} {user.lastName}
-        </h2>
+        <h2 className="font-semibold text-xl text-ink">{user.name}</h2>
         <p className="text-muted text-sm">{user.email}</p>
         <div className="mt-2">
           <RoleBadge role={user.role} />
@@ -144,64 +69,60 @@ function ProfileHeader({ user }: { user: User }) {
   )
 }
 
-function PersonalInfoForm({ user }: { user: User }) {
-  const [firstName, setFirstName] = useState(user.firstName)
-  const [lastName, setLastName] = useState(user.lastName)
-  const [email, setEmail] = useState(user.email)
-  const [phone, setPhone] = useState(user.phone)
+function PersonalInfoForm({ user }: { user: AuthUser }) {
+  const router = useRouter()
+  const [name, setName] = useState(user.name)
+  const [phone, setPhone] = useState(user.phone ?? '')
   const [success, setSuccess] = useState(false)
-  const updateProfile = useUpdateProfile()
+  const [error, setError] = useState<string | null>(null)
+  const [isPending, setIsPending] = useState(false)
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault()
       setSuccess(false)
-      try {
-        await updateProfile.mutateAsync({ firstName, lastName, email, phone })
-        setSuccess(true)
-        setTimeout(() => setSuccess(false), 3000)
-      } catch {
-        // Error handling
+      setError(null)
+      setIsPending(true)
+
+      const result = await authClient.updateUser({
+        name: name.trim(),
+        phone: phone.trim(),
+      })
+
+      setIsPending(false)
+
+      if (result.error) {
+        setError(result.error.message ?? 'Could not update your profile')
+        return
       }
+
+      // La session est mise en cache dans un cookie : sans rafraîchissement, le
+      // nom affiché resterait l'ancien jusqu'à expiration du cache.
+      router.refresh()
+      setSuccess(true)
+      setTimeout(() => setSuccess(false), 3000)
     },
-    [updateProfile, firstName, lastName, email, phone]
+    [name, phone, router]
   )
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <label
-            htmlFor="profile-first-name"
-            className="block text-sm font-medium text-ink mb-1.5"
-          >
-            First Name
-          </label>
-          <input
-            id="profile-first-name"
-            type="text"
-            required
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-            className="w-full px-4 py-3 rounded-2xl border border-surface focus:border-primary focus:outline-none transition-colors"
-          />
-        </div>
-        <div>
-          <label
-            htmlFor="profile-last-name"
-            className="block text-sm font-medium text-ink mb-1.5"
-          >
-            Last Name
-          </label>
-          <input
-            id="profile-last-name"
-            type="text"
-            required
-            value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
-            className="w-full px-4 py-3 rounded-2xl border border-surface focus:border-primary focus:outline-none transition-colors"
-          />
-        </div>
+      <div>
+        <label
+          htmlFor="profile-name"
+          className="block text-sm font-medium text-ink mb-1.5"
+        >
+          Full Name
+        </label>
+        <input
+          id="profile-name"
+          type="text"
+          autoComplete="name"
+          required
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="w-full px-4 py-3 rounded-2xl border border-surface focus:border-primary focus:outline-none transition-colors"
+        />
       </div>
 
       <div>
@@ -211,13 +132,16 @@ function PersonalInfoForm({ user }: { user: User }) {
         >
           Email
         </label>
+        {/* Lecture seule : changer d'adresse demande de vérifier la nouvelle,
+            donc un envoi d'email — pas de fournisseur branché à ce stade.
+            Un champ modifiable qui ne change rien serait pire que pas de champ. */}
         <input
           id="profile-email"
           type="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full px-4 py-3 rounded-2xl border border-surface focus:border-primary focus:outline-none transition-colors"
+          value={user.email}
+          readOnly
+          disabled
+          className="w-full px-4 py-3 rounded-2xl border border-surface bg-surface/50 text-muted cursor-not-allowed"
         />
       </div>
 
@@ -226,17 +150,27 @@ function PersonalInfoForm({ user }: { user: User }) {
           htmlFor="profile-phone"
           className="block text-sm font-medium text-ink mb-1.5"
         >
-          Phone
+          Téléphone
         </label>
+        {/* Valeur par défaut du checkout, rien de plus : le numéro qui engage
+            une réservation est figé sur celle-ci au moment de la créer. Le
+            modifier ici ne réécrit donc aucune réservation passée. */}
         <input
           id="profile-phone"
           type="tel"
-          required
+          autoComplete="tel"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
+          placeholder="+230 5xxx xxxx"
           className="w-full px-4 py-3 rounded-2xl border border-surface focus:border-primary focus:outline-none transition-colors"
         />
+        <p className="text-xs text-muted mt-1.5">
+          Pré-rempli lors de vos réservations, pour que l&apos;opérateur puisse
+          vous joindre.
+        </p>
       </div>
+
+      {error && <p className="text-red-500 text-sm">{error}</p>}
 
       {success && (
         <p className="text-green-600 text-sm">Profile updated successfully!</p>
@@ -244,10 +178,10 @@ function PersonalInfoForm({ user }: { user: User }) {
 
       <button
         type="submit"
-        disabled={updateProfile.isPending}
+        disabled={isPending}
         className="w-full sm:w-auto bg-primary text-white font-semibold px-6 py-3 rounded-2xl active:scale-95 transition-transform disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
       >
-        {updateProfile.isPending ? (
+        {isPending ? (
           <>
             <Loader2 className="w-5 h-5 animate-spin" />
             Saving...
@@ -263,12 +197,13 @@ function PersonalInfoForm({ user }: { user: User }) {
 export default function AccountPage() {
   const router = useRouter()
   const { data: user, isLoading: authLoading } = useAuth()
-  const { data: bookings, isLoading: bookingsLoading } = useMyBookings()
+  const { data: bookings, isLoading: bookingsLoading } = useMyBookings(!!user)
   const logout = useLogout()
   const [activeTab, setActiveTab] = useState<'bookings' | 'info'>('bookings')
 
   const handleLogout = useCallback(async () => {
     await logout.mutateAsync()
+    router.refresh()
     router.push('/')
   }, [logout, router])
 
@@ -301,6 +236,28 @@ export default function AccountPage() {
       <div className="container mx-auto px-4 max-w-2xl">
         {/* Profile Header */}
         <ProfileHeader user={user} />
+
+        {/* Accès aux espaces réservés.
+            Sans ce raccourci, /admin et /operator ne sont atteignables qu'en
+            tapant l'URL — les pages existent mais rien n'y mène. */}
+        {(user.role === 'operator' || user.role === 'admin') && (
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link
+              href="/operator/dashboard"
+              className="flex-1 min-w-[160px] text-center bg-white shadow-card rounded-2xl py-3 font-semibold text-ink hover:text-primary transition-colors"
+            >
+              Espace opérateur
+            </Link>
+            {user.role === 'admin' && (
+              <Link
+                href="/admin"
+                className="flex-1 min-w-[160px] text-center bg-white shadow-card rounded-2xl py-3 font-semibold text-ink hover:text-primary transition-colors"
+              >
+                Administration
+              </Link>
+            )}
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="flex mt-6 bg-white rounded-xl p-1 shadow-card">

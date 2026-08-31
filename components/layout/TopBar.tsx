@@ -3,13 +3,20 @@
 import { useState } from "react";
 import { Search, ShoppingCart, X } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
+import { useCartHydrated, useCartStore } from "@/lib/stores/cart";
 
-interface TopBarProps {
-  cartCount?: number;
-}
-
-export function TopBar({ cartCount = 0 }: TopBarProps) {
+export function TopBar() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  // Le compteur était figé à 0 et l'icône ne menait nulle part : le panier se
+  // remplissait sans aucun retour visible. Il est lu ici directement dans le
+  // store plutôt que passé en prop — le layout qui rend TopBar est un composant
+  // serveur, il ne peut pas connaître un état qui vit dans localStorage.
+  const itemCount = useCartStore((s) => s.items.length);
+  const hydrated = useCartHydrated();
+  // Avant réhydratation, le serveur a rendu 0 : afficher le compte restauré
+  // trop tôt provoquerait une erreur d'hydratation.
+  const cartCount = hydrated ? itemCount : 0;
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 h-14 bg-white border-b border-muted/10">
@@ -52,9 +59,10 @@ export function TopBar({ cartCount = 0 }: TopBarProps) {
             <Search className="w-5 h-5 text-primary" />
           </button>
 
-          <button
+          <Link
+            href="/cart"
             className="relative min-w-[48px] min-h-[48px] flex items-center justify-center active:scale-95 transition-transform"
-            aria-label={`Panier avec ${cartCount} articles`}
+            aria-label={`Panier avec ${cartCount} activité(s)`}
           >
             <ShoppingCart className="w-5 h-5 text-primary" />
             {cartCount > 0 && (
@@ -62,7 +70,7 @@ export function TopBar({ cartCount = 0 }: TopBarProps) {
                 {cartCount > 99 ? "99+" : cartCount}
               </span>
             )}
-          </button>
+          </Link>
         </div>
       </div>
     </header>
