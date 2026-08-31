@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Une PR poussée trois fois de suite ne doit pas monopoliser trois runners :
+# seul le dernier commit d'une même référence mérite d'être vérifié.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verification:
+    name: Types et tests
+    runs-on: ubuntu-latest
+
+    # Postgres JETABLE, plutôt qu'une branche Neon.
+    #
+    # Les tests d'intégration n'utilisent aucune fonctionnalité propre à Neon :
+    # ils dépendent des 9 contraintes CHECK et de la séquence `booking_ref_seq`,
+    # toutes créées par le SQL des migrations, donc reproductibles sur n'importe
+    # quel Postgres. Conséquences directes :
+    #   - aucun secret de base à confier à la CI ;
+    #   - deux PR simultanées ne peuvent plus se marcher dessus sur les mêmes
+    #     tables, chaque run ayant sa propre instance ;
+    #   - c'est nettement plus rapide, sans aller-retour réseau.
+    # La version suit celle de production (Neon est en PG 18) : vérifier sur une
+    # version plus ancienne laisserait passer un écart de comportement.
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: trip4mauritius_test
+        ports:
+          - 5432:5432
+        # Sans cette sonde, les étapes démarreraient avant que Postgres accepte
+        # les connexions et `migrate deploy` échouerait par intermittence.
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Pas de pooler ici : la même URL sert au runtime et aux migrations.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/trip4mauritius_test
+      DATABASE_URL_UNPOOLED: postgresql://postgres:postgres@localhost:5432/trip4mauritius_test
+      # Valeur jetable. Elle n'ouvre l'accès à rien : la base est détruite avec
+      # le runner. Elle n'est là que pour qu'un import de lib/auth.ts ne fasse
+      # pas échouer la suite sur une variable absente.
+      BETTER_AUTH_SECRET: ci-secret-not-used-outside-this-runner
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Aligné sur le runtime de production (Node 24 LTS sur Vercel).
+          node-version: 24
+          cache: npm
+
+      # `postinstall` lance `prisma generate`, qui ne se connecte pas à la base :
+      # cette étape n'a donc pas besoin que Postgres soit prêt.
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Vérifier les types
+        run: npx tsc --noEmit
+
+      # C'est cette étape qui crée les CHECK écrits à la main dans le SQL. Sans
+      # elle, les tests tourneraient sur un schéma sans garde-fou et la
+      # survente ne serait plus détectable.
+      - name: Appliquer les migrations
+        run: npx prisma migrate deploy
+
+      - name: Lancer les tests
+        run: npm test

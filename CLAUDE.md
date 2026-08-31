@@ -3,6 +3,7 @@
 PWA marketplace touristique pour l'île Maurice. Touristes réservent des activités, opérateurs locaux les publient, admins modèrent.
 
 **Plan de référence : [docs/BACKEND-PLAN.md](docs/BACKEND-PLAN.md)** — le lire avant toute tâche backend.
+**Usage du site, rôle par rôle : [docs/GUIDE-UTILISATION.md](docs/GUIDE-UTILISATION.md).**
 
 ## Stack
 
@@ -56,6 +57,14 @@ npx tsc --noEmit       # le projet doit typechecker proprement
 npx vercel ...         # le CLI n'est pas installé globalement
 ```
 
+⚠️ `npm run lint` est un **script mort** : eslint n'est pas installé. Il est donc absent de la CI.
+
+## Intégration continue
+
+`.github/workflows/ci.yml` — sur chaque PR et sur `main` : `tsc --noEmit`, `prisma migrate deploy`, `npm test`.
+
+Les tests d'intégration y visent un **Postgres jetable lancé dans le runner** (`postgres:18-alpine`), pas une branche Neon. Ils ne dépendent d'aucune fonctionnalité Neon — seulement des CHECK et de la séquence créés par le SQL des migrations. D'où : aucun secret de base en CI, et deux PR simultanées ne peuvent plus s'écraser sur les mêmes tables. En local, `npm test` continue de viser la branche `dev` via `.env`.
+
 ## État d'avancement
 
 | Lot | État |
@@ -76,6 +85,7 @@ npx vercel ...         # le CLI n'est pas installé globalement
 - **Vérification d'email désactivée** (pas de Resend) : on peut s'inscrire avec l'adresse d'autrui. Corollaire : le champ email du profil est en lecture seule — changer d'adresse exigerait de vérifier la nouvelle.
 - **Rien ne freine encore la réservation.** Le garde-fou posé au lot 6 (une réservation active par créneau et par compte) empêche l'empilement trivial, mais **il est appliqué dans le service, pas par une contrainte en base** : Prisma ne modélise pas les index partiels et en supprimerait un au prochain `migrate dev`, silencieusement — exactement le risque que la règle sur `db push` existe pour éviter. La garantie tient parce que le contrôle est fait **après** l'UPDATE conditionnel, donc sous le verrou de ligne du créneau. À remplacer par un vrai index partiel le jour où Stripe rend l'acompte bloquant.
 - **Pas d'envoi de fichiers.** Photos d'activité et logo opérateur se saisissent en URL. Vercel Blob n'est pas installé et aucun `BLOB_READ_WRITE_TOKEN` n'est posé — à provisionner avant d'ouvrir aux opérateurs réels, sinon chacun devra héberger ses images ailleurs.
+- ⚠️ **Les comptes du seed n'ont aucun identifiant** : le seed écrit des lignes `User` mais jamais la ligne `Account` qui porte le mot de passe. **Personne ne peut donc se connecter en admin** — l'espace de modération est inatteignable — ni en opérateur du seed. Contournement actuel : s'inscrire, puis `UPDATE "user" SET role='admin'` en base, et se reconnecter. À corriger dans `prisma/seed.ts`, sinon la chaîne de modération n'est pas utilisable de bout en bout.
 - **Comptes de test `@example.com`** présents en production, laissés pour les tests client. À nettoyer avant mise en ligne.
 - **Descriptions d'activités générées** par gabarit dans le seed — à remplacer par de vrais textes.
 - **`images.unoptimized: true`** alors que certaines images pèsent ~1 Mo.
