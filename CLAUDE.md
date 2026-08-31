@@ -56,6 +56,14 @@ npx tsc --noEmit       # le projet doit typechecker proprement
 npx vercel ...         # le CLI n'est pas installé globalement
 ```
 
+⚠️ `npm run lint` est un **script mort** : eslint n'est pas installé. Il est donc absent de la CI.
+
+## Intégration continue
+
+`.github/workflows/ci.yml` — sur chaque PR et sur `main` : `tsc --noEmit`, `prisma migrate deploy`, `npm test`.
+
+Les tests d'intégration y visent un **Postgres jetable lancé dans le runner** (`postgres:18-alpine`), pas une branche Neon. Ils ne dépendent d'aucune fonctionnalité Neon — seulement des CHECK et de la séquence créés par le SQL des migrations. D'où : aucun secret de base en CI, et deux PR simultanées ne peuvent plus s'écraser sur les mêmes tables. En local, `npm test` continue de viser la branche `dev` via `.env`.
+
 ## État d'avancement
 
 | Lot | État |
