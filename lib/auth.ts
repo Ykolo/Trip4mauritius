@@ -51,6 +51,15 @@ export const auth = betterAuth({
         defaultValue: 'fr',
         input: true,
       },
+      // Simple valeur par défaut de formulaire — l'utilisateur peut la changer
+      // librement, aucune décision serveur n'en dépend. Le numéro qui engage
+      // une réservation est copié sur Booking.contactPhone au moment de créer
+      // celle-ci.
+      phone: {
+        type: 'string',
+        required: false,
+        input: true,
+      },
     },
   },
 

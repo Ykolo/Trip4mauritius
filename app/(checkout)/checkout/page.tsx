@@ -1,28 +1,28 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Check, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
-import { useCart, useCreateOrder } from '@/lib/hooks/useCart'
+import { Check, ChevronDown, ChevronUp, Loader2, AlertCircle } from 'lucide-react'
+import { useAuth } from '@/lib/hooks/useAuth'
+import { useCartHydrated, useCartStore, useCartTotals } from '@/lib/stores/cart'
+import { useTRPC } from '@/lib/trpc/client'
+import { SkeletonCard } from '@/components/ui/SkeletonCard'
+
+// Le tunnel exige un compte : `Booking.userId` n'est pas nullable, une
+// réservation appartient forcément à quelqu'un. Le parcours « invité » qui
+// figurait ici ne pouvait donc rien produire. `/checkout` est protégé par
+// proxy.ts, cet écran n'est qu'un filet si le cookie expire en cours de route.
 
 type Step = 1 | 2 | 3
 
-interface FormData {
-  firstName: string
-  lastName: string
-  email: string
-  phone: string
-  createAccount: boolean
-  password: string
-}
-
 function StepIndicator({ currentStep }: { currentStep: Step }) {
   const steps = [
-    { num: 1, label: 'Details' },
-    { num: 2, label: 'Payment' },
-    { num: 3, label: 'Confirmed' },
+    { num: 1, label: 'Coordonnées' },
+    { num: 2, label: 'Récapitulatif' },
+    { num: 3, label: 'Confirmée' },
   ]
 
   return (
@@ -58,82 +58,125 @@ function StepIndicator({ currentStep }: { currentStep: Step }) {
 }
 
 export default function CheckoutPage() {
+  const trpc = useTRPC()
+  const queryClient = useQueryClient()
+  const { data: user, isLoading: authLoading } = useAuth()
+  const cart = useCartTotals()
+  const hydrated = useCartHydrated()
+  const clearCart = useCartStore((s) => s.clear)
+
   const [step, setStep] = useState<Step>(1)
   const [orderSummaryOpen, setOrderSummaryOpen] = useState(false)
+  const [phone, setPhone] = useState('')
+  const [phoneError, setPhoneError] = useState<string | null>(null)
   const [bookingRef, setBookingRef] = useState('')
-  const [formData, setFormData] = useState<FormData>({
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
-    createAccount: false,
-    password: '',
-  })
-  const [errors, setErrors] = useState<Partial<FormData>>({})
+  const [confirmedDeposit, setConfirmedDeposit] = useState(0)
 
-  const { data: cart } = useCart()
-  const createOrder = useCreateOrder()
+  // Le numéro du profil ne sert que de valeur par défaut : l'utilisateur reste
+  // libre de donner un autre contact pour ce voyage-ci.
+  useEffect(() => {
+    if (user?.phone) setPhone(user.phone)
+  }, [user?.phone])
 
-  const validateStep1 = (): boolean => {
-    const newErrors: Partial<FormData> = {}
-
-    if (!formData.firstName.trim()) {
-      newErrors.firstName = 'First name is required'
-    }
-    if (!formData.lastName.trim()) {
-      newErrors.lastName = 'Last name is required'
-    }
-    if (!formData.email.trim()) {
-      newErrors.email = 'Email is required'
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'Invalid email address'
-    }
-    if (!formData.phone.trim()) {
-      newErrors.phone = 'Phone is required'
-    }
-    if (formData.createAccount && formData.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters'
-    }
-
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
+  const createBooking = useMutation(
+    trpc.booking.create.mutationOptions({
+      onSuccess: (result) => {
+        setBookingRef(result.bookingRef)
+        setConfirmedDeposit(result.totalDeposit)
+        // Le panier n'a plus lieu d'être : ses lignes sont devenues des
+        // réservations. Le vider APRÈS le succès seulement — sur un échec, on
+        // veut que l'utilisateur retrouve sa sélection intacte.
+        clearCart()
+        queryClient.invalidateQueries({ queryKey: trpc.booking.list.queryKey() })
+        queryClient.invalidateQueries({ queryKey: trpc.activity.pathKey() })
+        setStep(3)
+      },
+    }),
+  )
 
   const handleContinue = () => {
-    if (validateStep1()) {
-      setStep(2)
+    if (phone.trim().length < 6) {
+      setPhoneError('Merci d’indiquer un numéro où l’opérateur peut vous joindre.')
+      return
     }
+    setPhoneError(null)
+    setStep(2)
   }
 
-  const handlePay = async () => {
-    const result = await createOrder.mutateAsync()
-    setBookingRef(result.bookingRef)
-    setStep(3)
+  const handleConfirm = () => {
+    createBooking.mutate({
+      // Seuls le créneau et le nombre de participants partent : aucun montant.
+      // Le serveur relit le prix en base et recalcule tout.
+      items: cart.items.map((item) => ({
+        slotId: item.slotId,
+        participants: item.participants,
+      })),
+      contactPhone: phone.trim(),
+    })
   }
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value, type, checked } = e.target
-    setFormData((prev) => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value,
-    }))
-    // Clear error when user types
-    if (errors[name as keyof FormData]) {
-      setErrors((prev) => ({ ...prev, [name]: undefined }))
-    }
+  if (authLoading || !hydrated) {
+    return (
+      <div className="min-h-screen bg-base py-8">
+        <div className="container mx-auto px-4 max-w-2xl">
+          <SkeletonCard />
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-base flex items-center justify-center px-4">
+        <div className="bg-white rounded-2xl shadow-card p-8 text-center max-w-sm">
+          <h1 className="text-xl font-semibold text-ink mb-2">
+            Connectez-vous pour réserver
+          </h1>
+          <p className="text-muted text-sm mb-6">
+            Une réservation est rattachée à votre compte : c&apos;est ce qui vous
+            permet de la retrouver et de l&apos;annuler.
+          </p>
+          <Link
+            href="/login?redirect=/checkout"
+            className="inline-block w-full bg-primary text-white font-semibold py-3 rounded-2xl active:scale-95 transition-transform"
+          >
+            Se connecter
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  // Panier vide et réservation non encore passée : il n'y a rien à valider.
+  if (cart.items.length === 0 && step !== 3) {
+    return (
+      <div className="min-h-screen bg-base flex items-center justify-center px-4">
+        <div className="text-center">
+          <div className="text-6xl mb-4">🛒</div>
+          <h1 className="text-xl font-semibold text-ink mb-2">
+            Votre panier est vide
+          </h1>
+          <Link
+            href="/activities"
+            className="inline-block mt-4 bg-primary text-white font-semibold px-6 py-3 rounded-2xl active:scale-95 transition-transform"
+          >
+            Parcourir les activités
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="min-h-screen bg-base py-8">
       <div className="container mx-auto px-4 max-w-2xl">
         <h1 className="text-2xl font-semibold text-ink text-center mb-6">
-          Checkout
+          Réservation
         </h1>
 
         <StepIndicator currentStep={step} />
 
         <AnimatePresence mode="wait">
-          {/* Step 1: Your Details */}
           {step === 1 && (
             <motion.div
               key="step1"
@@ -143,82 +186,37 @@ export default function CheckoutPage() {
               className="bg-white rounded-2xl shadow-card p-6"
             >
               <h2 className="text-lg font-semibold text-ink mb-4">
-                Your Details
+                Vos coordonnées
               </h2>
 
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label
-                      htmlFor="firstName"
-                      className="block text-sm font-medium text-ink mb-1"
-                    >
-                      First Name *
-                    </label>
-                    <input
-                      type="text"
-                      id="firstName"
-                      name="firstName"
-                      value={formData.firstName}
-                      onChange={handleInputChange}
-                      className={`w-full px-4 py-3 rounded-xl border ${
-                        errors.firstName ? 'border-red-500' : 'border-surface'
-                      } bg-base focus:outline-none focus:ring-2 focus:ring-primary/20`}
-                      required
-                    />
-                    {errors.firstName && (
-                      <p className="text-red-500 text-xs mt-1">
-                        {errors.firstName}
-                      </p>
-                    )}
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="lastName"
-                      className="block text-sm font-medium text-ink mb-1"
-                    >
-                      Last Name *
-                    </label>
-                    <input
-                      type="text"
-                      id="lastName"
-                      name="lastName"
-                      value={formData.lastName}
-                      onChange={handleInputChange}
-                      className={`w-full px-4 py-3 rounded-xl border ${
-                        errors.lastName ? 'border-red-500' : 'border-surface'
-                      } bg-base focus:outline-none focus:ring-2 focus:ring-primary/20`}
-                      required
-                    />
-                    {errors.lastName && (
-                      <p className="text-red-500 text-xs mt-1">
-                        {errors.lastName}
-                      </p>
-                    )}
-                  </div>
+                <div>
+                  <label className="block text-sm font-medium text-ink mb-1">
+                    Nom
+                  </label>
+                  {/* Nom et email viennent de la session : les ressaisir
+                      ouvrirait la porte à une réservation au nom d'un autre, et
+                      créerait un second jeu de coordonnées à maintenir. */}
+                  <input
+                    type="text"
+                    value={user.name}
+                    readOnly
+                    disabled
+                    className="w-full px-4 py-3 rounded-xl border border-surface bg-surface/50 text-muted cursor-not-allowed"
+                  />
                 </div>
 
                 <div>
-                  <label
-                    htmlFor="email"
-                    className="block text-sm font-medium text-ink mb-1"
-                  >
-                    Email *
+                  <label className="block text-sm font-medium text-ink mb-1">
+                    Email
                   </label>
                   <input
                     type="email"
-                    id="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    className={`w-full px-4 py-3 rounded-xl border ${
-                      errors.email ? 'border-red-500' : 'border-surface'
-                    } bg-base focus:outline-none focus:ring-2 focus:ring-primary/20`}
-                    required
+                    value={user.email}
+                    readOnly
+                    disabled
+                    className="w-full px-4 py-3 rounded-xl border border-surface bg-surface/50 text-muted cursor-not-allowed"
                   />
-                  {errors.email && (
-                    <p className="text-red-500 text-xs mt-1">{errors.email}</p>
-                  )}
                 </div>
 
                 <div>
@@ -226,83 +224,41 @@ export default function CheckoutPage() {
                     htmlFor="phone"
                     className="block text-sm font-medium text-ink mb-1"
                   >
-                    Phone *
+                    Téléphone *
                   </label>
                   <input
                     type="tel"
                     id="phone"
                     name="phone"
-                    value={formData.phone}
-                    onChange={handleInputChange}
+                    autoComplete="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="+230 5xxx xxxx"
                     className={`w-full px-4 py-3 rounded-xl border ${
-                      errors.phone ? 'border-red-500' : 'border-surface'
+                      phoneError ? 'border-red-500' : 'border-surface'
                     } bg-base focus:outline-none focus:ring-2 focus:ring-primary/20`}
                     required
                   />
-                  {errors.phone && (
-                    <p className="text-red-500 text-xs mt-1">{errors.phone}</p>
+                  {phoneError ? (
+                    <p className="text-red-500 text-xs mt-1">{phoneError}</p>
+                  ) : (
+                    <p className="text-xs text-muted mt-1">
+                      L&apos;opérateur l&apos;utilisera pour vous joindre en cas
+                      de météo défavorable ou de changement d&apos;horaire.
+                    </p>
                   )}
                 </div>
-
-                <div className="flex items-center gap-3 pt-2">
-                  <input
-                    type="checkbox"
-                    id="createAccount"
-                    name="createAccount"
-                    checked={formData.createAccount}
-                    onChange={handleInputChange}
-                    className="w-5 h-5 rounded border-surface text-primary focus:ring-primary"
-                  />
-                  <label htmlFor="createAccount" className="text-sm text-ink">
-                    Create an account to track your bookings
-                  </label>
-                </div>
-
-                {formData.createAccount && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                  >
-                    <label
-                      htmlFor="password"
-                      className="block text-sm font-medium text-ink mb-1"
-                    >
-                      Password *
-                    </label>
-                    <input
-                      type="password"
-                      id="password"
-                      name="password"
-                      value={formData.password}
-                      onChange={handleInputChange}
-                      minLength={8}
-                      className={`w-full px-4 py-3 rounded-xl border ${
-                        errors.password ? 'border-red-500' : 'border-surface'
-                      } bg-base focus:outline-none focus:ring-2 focus:ring-primary/20`}
-                    />
-                    {errors.password && (
-                      <p className="text-red-500 text-xs mt-1">
-                        {errors.password}
-                      </p>
-                    )}
-                    <p className="text-xs text-muted mt-1">
-                      At least 8 characters
-                    </p>
-                  </motion.div>
-                )}
               </div>
 
               <button
                 onClick={handleContinue}
                 className="w-full mt-6 bg-primary text-white font-semibold py-4 rounded-2xl active:scale-95 transition-transform"
               >
-                Continue
+                Continuer
               </button>
             </motion.div>
           )}
 
-          {/* Step 2: Payment */}
           {step === 2 && (
             <motion.div
               key="step2"
@@ -311,16 +267,17 @@ export default function CheckoutPage() {
               exit={{ opacity: 0, x: -20 }}
               className="space-y-4"
             >
-              {/* Order Summary Accordion (mobile) */}
               <div className="bg-white rounded-2xl shadow-card overflow-hidden">
                 <button
                   onClick={() => setOrderSummaryOpen(!orderSummaryOpen)}
                   className="w-full px-6 py-4 flex items-center justify-between"
                 >
-                  <span className="font-semibold text-ink">Order Summary</span>
+                  <span className="font-semibold text-ink">
+                    {cart.itemCount} activité(s)
+                  </span>
                   <div className="flex items-center gap-2">
                     <span className="text-accent font-bold">
-                      &euro;{cart.total}
+                      &euro;{cart.totalDeposit.toFixed(0)}
                     </span>
                     {orderSummaryOpen ? (
                       <ChevronUp className="w-5 h-5 text-muted" />
@@ -340,7 +297,7 @@ export default function CheckoutPage() {
                     >
                       <div className="px-6 pb-4 space-y-3">
                         {cart.items.map((item) => (
-                          <div key={item.id} className="flex gap-3">
+                          <div key={item.slotId} className="flex gap-3">
                             <div className="relative w-12 h-12 rounded-lg overflow-hidden flex-shrink-0">
                               <Image
                                 src={item.activity.imageUrl}
@@ -354,12 +311,10 @@ export default function CheckoutPage() {
                                 {item.activity.title}
                               </p>
                               <p className="text-xs text-muted">
-                                {item.participants} person(s)
+                                {item.slot.date} à {item.slot.time} ·{' '}
+                                {item.participants} pers.
                               </p>
                             </div>
-                            <p className="text-sm font-medium text-ink">
-                              &euro;{item.depositAmount}
-                            </p>
                           </div>
                         ))}
                       </div>
@@ -368,57 +323,83 @@ export default function CheckoutPage() {
                 </AnimatePresence>
               </div>
 
-              {/* Payment Card */}
               <div className="bg-white rounded-2xl shadow-card p-6">
                 <h2 className="text-lg font-semibold text-ink mb-4">
-                  Payment Details
+                  Paiement
                 </h2>
 
-                {/* Stripe placeholder */}
-                <div
-                  id="stripe-card-element"
-                  className="border border-surface rounded-2xl p-4 bg-base min-h-[120px] flex items-center justify-center"
-                >
-                  <p className="text-muted text-sm text-center">
-                    (Stripe Elements will be mounted here)
-                  </p>
+                {/* Stripe n'est pas branché : le dire franchement plutôt que
+                    d'afficher un faux formulaire de carte. La réservation est
+                    ferme, l'acompte se règle auprès de l'opérateur. */}
+                <div className="border border-amber-200 bg-amber-50 rounded-2xl p-4 flex gap-3">
+                  <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm text-amber-900">
+                    <p className="font-medium mb-1">
+                      Le paiement en ligne n&apos;est pas encore disponible.
+                    </p>
+                    <p>
+                      Votre réservation sera confirmée immédiatement et les
+                      places vous seront attribuées. L&apos;acompte sera à régler
+                      directement auprès de l&apos;opérateur.
+                    </p>
+                  </div>
                 </div>
 
-                {/* Price breakdown */}
                 <div className="mt-6 space-y-3">
                   <div className="flex justify-between">
-                    <span className="text-muted">Deposit due now</span>
+                    <span className="text-muted">Acompte (20 %)</span>
                     <span className="text-accent font-bold text-lg">
-                      &euro;{cart.total}
+                      &euro;{cart.totalDeposit.toFixed(0)}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted">Balance on-site</span>
+                    <span className="text-muted">Solde sur place</span>
                     <span className="text-muted">
-                      &euro;{cart.totalOnSite}
+                      &euro;{cart.totalOnSite.toFixed(0)}
                     </span>
                   </div>
                 </div>
 
+                {createBooking.error && (
+                  <div className="mt-6 border border-red-200 bg-red-50 rounded-2xl p-4">
+                    <p className="text-sm text-red-800">
+                      {createBooking.error.message}
+                    </p>
+                    <Link
+                      href="/cart"
+                      className="text-sm text-red-800 underline underline-offset-2 mt-2 inline-block"
+                    >
+                      Modifier mon panier
+                    </Link>
+                  </div>
+                )}
+
                 <button
-                  onClick={handlePay}
-                  disabled={createOrder.isPending}
+                  onClick={handleConfirm}
+                  disabled={createBooking.isPending}
                   className="w-full mt-6 bg-primary text-white font-semibold py-4 rounded-2xl active:scale-95 transition-transform disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  {createOrder.isPending ? (
+                  {createBooking.isPending ? (
                     <>
                       <Loader2 className="w-5 h-5 animate-spin" />
-                      Processing...
+                      Réservation en cours...
                     </>
                   ) : (
-                    `Pay €${cart.total} Now`
+                    'Confirmer ma réservation'
                   )}
+                </button>
+
+                <button
+                  onClick={() => setStep(1)}
+                  disabled={createBooking.isPending}
+                  className="w-full mt-3 text-muted text-sm py-2 hover:text-ink transition-colors disabled:opacity-50"
+                >
+                  Revenir aux coordonnées
                 </button>
               </div>
             </motion.div>
           )}
 
-          {/* Step 3: Confirmation */}
           {step === 3 && (
             <motion.div
               key="step3"
@@ -426,7 +407,6 @@ export default function CheckoutPage() {
               animate={{ opacity: 1, scale: 1 }}
               className="bg-white rounded-2xl shadow-card p-6 text-center"
             >
-              {/* Success checkmark */}
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
@@ -437,55 +417,40 @@ export default function CheckoutPage() {
               </motion.div>
 
               <h2 className="text-2xl font-display text-ink mb-2">
-                Booking Confirmed!
+                Réservation confirmée !
               </h2>
               <p className="text-muted mb-6">
-                Your adventure in Mauritius awaits
+                Votre aventure à l&apos;île Maurice vous attend
               </p>
 
-              {/* Booking reference */}
               <div className="bg-base rounded-xl px-6 py-4 inline-block mb-6">
-                <p className="text-xs text-muted mb-1">Booking Reference</p>
+                <p className="text-xs text-muted mb-1">Référence</p>
                 <p className="font-mono text-xl font-bold text-ink">
                   {bookingRef}
                 </p>
               </div>
 
-              {/* Cart items summary */}
-              <div className="border-t border-surface pt-6 mb-6">
-                <h3 className="text-sm font-semibold text-ink mb-3 text-left">
-                  Your Activities
-                </h3>
-                <div className="space-y-2">
-                  {cart.items.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex justify-between text-sm"
-                    >
-                      <span className="text-muted truncate flex-1 text-left">
-                        {item.activity.title}
-                      </span>
-                      <span className="text-ink font-medium ml-2">
-                        {item.participants} pax
-                      </span>
-                    </div>
-                  ))}
+              <div className="border-t border-surface pt-6 mb-6 text-left">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted">Acompte à régler</span>
+                  <span className="text-accent font-semibold">
+                    &euro;{confirmedDeposit.toFixed(0)}
+                  </span>
                 </div>
               </div>
 
-              {/* Action buttons */}
               <div className="flex flex-col sm:flex-row gap-3">
                 <Link
                   href="/bookings"
                   className="flex-1 bg-primary text-white font-semibold py-4 rounded-2xl active:scale-95 transition-transform text-center"
                 >
-                  View My Bookings
+                  Voir mes réservations
                 </Link>
                 <Link
-                  href="/"
+                  href="/activities"
                   className="flex-1 bg-surface text-ink font-semibold py-4 rounded-2xl active:scale-95 transition-transform text-center"
                 >
-                  Continue Exploring
+                  Continuer à explorer
                 </Link>
               </div>
             </motion.div>

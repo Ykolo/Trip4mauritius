@@ -38,6 +38,12 @@ model User {
   role   UserRole @default(tourist)
   locale String   @default("fr")
 
+  // Valeur PAR DÉFAUT du contact, pas la source de vérité d'une réservation :
+  // le numéro qu'un opérateur doit composer vit sur Booking.contactPhone (on
+  // réserve pour ses parents, ou avec une carte SIM locale achetée sur place).
+  // Ici uniquement pour pré-remplir le formulaire.
+  phone String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -228,6 +234,11 @@ model Booking {
   totalPrice       Decimal @db.Decimal(10, 2)
   depositDue       Decimal @db.Decimal(10, 2)
   balanceDueOnSite Decimal @db.Decimal(10, 2)
+
+  // Le numéro que l'opérateur compose pour CE départ. Figé à la réservation :
+  // s'il pointait sur User.phone, une modification de profil réécrirait le
+  // contact de réservations déjà passées.
+  contactPhone String?
 
   status                BookingStatus @default(pending_payment)
   stripePaymentIntentId String?       @unique

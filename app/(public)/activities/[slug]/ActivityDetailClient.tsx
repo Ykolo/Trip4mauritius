@@ -27,6 +27,12 @@ export function ActivityDetailClient({ activity }: ActivityDetailClientProps) {
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null)
   const [activeLanguage, setActiveLanguage] = useState<LanguageCode>('en')
 
+  // Le créneau complet, pas seulement son id : `PriceBreakdown` a besoin de
+  // `spotsLeft` pour plafonner le sélecteur de participants, et de la date pour
+  // remplir la ligne de panier.
+  const selectedSlot =
+    activity.slots.find((slot) => slot.id === selectedSlotId) ?? null
+
   return (
     <div className="pb-32 md:pb-8">
       {/* Breadcrumb */}
@@ -187,24 +193,14 @@ export function ActivityDetailClient({ activity }: ActivityDetailClientProps) {
 
           {/* Price breakdown sidebar (right 1/3 on desktop) */}
           <div className="hidden md:block">
-            <PriceBreakdown
-              priceHT={activity.priceHT}
-              maxParticipants={activity.maxParticipants}
-              selectedSlotId={selectedSlotId}
-              activityId={activity.id}
-            />
+            <PriceBreakdown activity={activity} selectedSlot={selectedSlot} />
           </div>
         </div>
       </div>
 
       {/* Mobile price bar */}
       <div className="md:hidden">
-        <PriceBreakdown
-          priceHT={activity.priceHT}
-          maxParticipants={activity.maxParticipants}
-          selectedSlotId={selectedSlotId}
-          activityId={activity.id}
-        />
+        <PriceBreakdown activity={activity} selectedSlot={selectedSlot} />
       </div>
     </div>
   )

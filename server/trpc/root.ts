@@ -1,9 +1,14 @@
 import { activityRouter } from '@/server/trpc/routers/activity'
+import { bookingRouter } from '@/server/trpc/routers/booking'
+import { operatorRouter } from '@/server/trpc/routers/operator'
+import { adminRouter } from '@/server/trpc/routers/admin'
 import { createCallerFactory, createTRPCRouter } from '@/server/trpc/init'
 
 export const appRouter = createTRPCRouter({
   activity: activityRouter,
-  // TODO — booking (lot 6), operator (lot 7), admin (lot 8)
+  booking: bookingRouter,
+  operator: operatorRouter,
+  admin: adminRouter,
 })
 
 export type AppRouter = typeof appRouter

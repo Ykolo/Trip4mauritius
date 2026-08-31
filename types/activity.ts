@@ -1,3 +1,11 @@
+/** Les 5 états de `ActivityStatus` en base, tels quels. */
+export type ActivityStatus =
+  | 'draft'
+  | 'pending_moderation'
+  | 'published'
+  | 'rejected'
+  | 'archived'
+
 export interface ActivitySlot {
   id: string
   date: string

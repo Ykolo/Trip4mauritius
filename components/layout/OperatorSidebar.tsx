@@ -2,7 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { LayoutDashboard, CalendarDays, Ticket, Wallet, Settings } from "lucide-react";
+import { useTRPC } from "@/lib/trpc/client";
+
+/** Initiales du nom commercial — le nom est libre, il peut n'avoir qu'un mot. */
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  const letters = parts.length === 1 ? parts[0].slice(0, 2) : parts[0][0] + parts[1][0];
+  return letters.toUpperCase();
+}
 
 const menuItems = [
   { href: "/dashboard", label: "Vue d'ensemble", icon: LayoutDashboard },
@@ -14,6 +24,10 @@ const menuItems = [
 
 export function OperatorSidebar() {
   const pathname = usePathname();
+  // Le pied de barre affichait « Ocean Adventures » en dur : un opérateur y
+  // lisait le nom d'un autre, juste à côté de ses propres activités.
+  const trpc = useTRPC();
+  const { data: profile } = useQuery(trpc.operator.myProfile.queryOptions());
 
   return (
     <aside className="hidden md:flex flex-col w-64 h-screen bg-surface border-r border-muted/20 sticky top-0">
@@ -49,13 +63,24 @@ export function OperatorSidebar() {
       <div className="p-4 border-t border-muted/20 shrink-0">
         <div className="flex items-center gap-3 px-2">
           <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center text-accent font-bold border border-accent/20">
-            OA
+            {profile ? initials(profile.displayName) : "—"}
           </div>
-          <div>
-            <p className="font-body text-sm font-semibold text-ink line-clamp-1">Ocean Adventures</p>
-            <p className="text-xs text-green-600 font-medium flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-green-500 block"></span> En ligne
+          <div className="min-w-0">
+            <p className="font-body text-sm font-semibold text-ink line-clamp-1">
+              {profile?.displayName ?? "…"}
             </p>
+            {/* Le badge reflète la VÉRIFICATION réelle : afficher « En ligne »
+                à un opérateur non encore validé lui laisserait croire que ses
+                fiches sont publiables. */}
+            {profile?.verified ? (
+              <p className="text-xs text-green-600 font-medium flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-green-500 block"></span> Vérifié
+              </p>
+            ) : (
+              <p className="text-xs text-amber-600 font-medium flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-amber-500 block"></span> En attente
+              </p>
+            )}
           </div>
         </div>
       </div>

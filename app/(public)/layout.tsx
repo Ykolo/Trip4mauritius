@@ -9,7 +9,7 @@ export default function PublicLayout({
 }) {
   return (
     <>
-      <TopBar cartCount={0} />
+      <TopBar />
       <div className="pt-14 min-h-screen flex flex-col">
         <div className="flex-1">
           {children}
