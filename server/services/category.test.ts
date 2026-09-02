@@ -11,8 +11,23 @@ import {
 import { listActivities } from '@/server/services/activity'
 
 const TEST_PREFIX = 'Vitest Cat '
+const CATALOGUE_SLUG_PREFIX = 'vitest-cat-'
 
+/**
+ * L'ordre n'est pas négociable : `activities → categories` est en RESTRICT,
+ * donc supprimer une catégorie encore référencée échoue. Activités d'abord,
+ * puis opérateurs et comptes, puis catégories.
+ */
 async function cleanup() {
+  await db.activity.deleteMany({
+    where: { slug: { startsWith: CATALOGUE_SLUG_PREFIX } },
+  })
+  await db.operator.deleteMany({
+    where: { user: { email: { startsWith: CATALOGUE_SLUG_PREFIX } } },
+  })
+  await db.user.deleteMany({
+    where: { email: { startsWith: CATALOGUE_SLUG_PREFIX } },
+  })
   await db.category.deleteMany({ where: { label: { startsWith: TEST_PREFIX } } })
 }
 
@@ -109,19 +124,61 @@ describe('masquage', () => {
 })
 
 describe('filtrage du catalogue', () => {
+  /**
+   * Publie une activité dans une catégorie fraîche.
+   *
+   * Ces tests construisent leurs propres données au lieu de s'appuyer sur le
+   * seed : en CI, ils visent un Postgres jetable qui n'a que les migrations —
+   * pas les 22 activités de la branche Neon `dev`. S'appuyer sur le seed les
+   * faisait passer en local et échouer en CI, ce qui est le pire des deux.
+   */
+  async function publishedActivityIn(label: string) {
+    const category = await createCategory({ label: `${TEST_PREFIX}${label}` })
+
+    const user = await db.user.create({
+      data: {
+        email: `${CATALOGUE_SLUG_PREFIX}${label}-${Date.now()}@example.test`,
+        name: `Pro ${label}`,
+        role: 'operator',
+      },
+    })
+    const operator = await db.operator.create({
+      data: { userId: user.id, displayName: `Enseigne ${label}` },
+    })
+
+    const activity = await db.activity.create({
+      data: {
+        operatorId: operator.id,
+        categoryId: category.id,
+        slug: `${CATALOGUE_SLUG_PREFIX}${label}-${Date.now()}`,
+        title: `Sortie ${label}`,
+        region: 'North',
+        duration: '2h',
+        priceHt: 50,
+        maxParticipants: 10,
+        status: 'published',
+        description: { fr: 'x' },
+      },
+    })
+
+    return { category, activity, operatorUserId: user.id }
+  }
+
   it('filtre sur le slug, et un slug inconnu ne renvoie rien', async () => {
-    const all = await listActivities({ page: 1 })
-    expect(all.total).toBeGreaterThan(0)
+    const mine = await publishedActivityIn('filtre')
+    const other = await publishedActivityIn('autre')
 
-    const categories = await listActiveCategories()
-    const used = categories.find((c) => c.slug === 'vehicules') ?? categories[0]
+    const filtered = await listActivities({
+      page: 1,
+      category: [mine.category.slug],
+    })
 
-    const filtered = await listActivities({ page: 1, category: [used.slug] })
-    expect(filtered.total).toBeGreaterThan(0)
-    expect(filtered.total).toBeLessThanOrEqual(all.total)
-    expect(filtered.activities.every((a) => a.categorySlug === used.slug)).toBe(
-      true,
-    )
+    expect(filtered.total).toBe(1)
+    expect(filtered.activities[0].slug).toBe(mine.activity.slug)
+    // L'activité de l'autre catégorie ne doit pas remonter.
+    expect(
+      filtered.activities.some((a) => a.slug === other.activity.slug),
+    ).toBe(false)
 
     // C'était le bug d'origine : les vignettes de l'accueil pointaient sur des
     // slugs qu'aucune activité ne portait, et renvoyaient une page vide.
@@ -130,12 +187,17 @@ describe('filtrage du catalogue', () => {
   })
 
   it("expose le libellé pour l'affichage ET le slug pour le filtrage", async () => {
-    const { activities } = await listActivities({ page: 1 })
-    const activity = activities[0]
+    const { category } = await publishedActivityIn('contrat')
 
-    expect(activity.category).toBeTruthy()
-    expect(activity.categorySlug).toBeTruthy()
+    const { activities } = await listActivities({
+      page: 1,
+      category: [category.slug],
+    })
+
+    expect(activities).toHaveLength(1)
+    expect(activities[0].category).toBe(category.label)
+    expect(activities[0].categorySlug).toBe(category.slug)
     // Les confondre est exactement ce qui a cassé le catalogue.
-    expect(activity.categorySlug).toBe(slugify(activity.categorySlug))
+    expect(activities[0].category).not.toBe(activities[0].categorySlug)
   })
 })
