@@ -1,6 +1,7 @@
 import type {
   Activity as DbActivity,
   ActivitySlot as DbSlot,
+  Category as DbCategory,
   Operator as DbOperator,
 } from '@prisma/client'
 import { mauritiusDate, mauritiusTime } from '@/lib/datetime'
@@ -55,12 +56,22 @@ export function toActivityOperator(operator: DbOperator): ActivityOperator {
   }
 }
 
-export function toActivity(activity: DbActivity): Activity {
+/**
+ * La catégorie est désormais une relation, donc TOUTE lecture d'activité doit
+ * l'inclure. Le type l'impose : une requête qui l'oublie ne compile pas.
+ */
+export type DbActivityWithCategory = DbActivity & { category: DbCategory }
+
+export function toActivity(activity: DbActivityWithCategory): Activity {
   return {
     id: activity.id,
     slug: activity.slug,
     title: activity.title,
-    category: activity.category,
+    // Le front affiche le LIBELLÉ et filtre sur le SLUG. Les confondre, c'est
+    // exactement le bug d'origine : les vignettes de l'accueil pointaient sur
+    // `?category=diving` quand la base contenait « Water Sports ».
+    category: activity.category.label,
+    categorySlug: activity.category.slug,
     region: activity.region,
     duration: activity.duration,
     // `priceFrom` est DÉRIVÉ du prix par personne — jamais stocké.
@@ -72,7 +83,7 @@ export function toActivity(activity: DbActivity): Activity {
 }
 
 export function toActivityFull(
-  activity: DbActivity & { operator: DbOperator; slots: DbSlot[] },
+  activity: DbActivityWithCategory & { operator: DbOperator; slots: DbSlot[] },
 ): ActivityFull {
   return {
     ...toActivity(activity),

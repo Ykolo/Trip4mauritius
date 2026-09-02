@@ -1,9 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import { Pacifico, Poppins } from "next/font/google";
+import { connection } from "next/server";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import { ServiceWorkerInit } from "@/components/layout/ServiceWorkerInit";
+import { FeatureProvider } from "@/components/providers/FeatureProvider";
 import { TRPCReactProvider } from "@/lib/trpc/client";
+import { getFeatures } from "@/server/services/features";
 
 const pacifico = Pacifico({
   weight: "400",
@@ -63,18 +66,30 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // `connection()` marque le rendu comme dépendant de la requête.
+  //
+  // Sans lui, Next prérendrait ce layout au build pour les pages statiques et y
+  // figerait les flags : une bascule depuis /admin/features prendrait effet sur
+  // /activities (déjà dynamique) mais pas sur l'accueil — jusqu'au prochain
+  // déploiement. Un interrupteur qui ne marche que sur une partie du site est
+  // pire qu'un rendu dynamique partout.
+  await connection();
+  const features = await getFeatures();
+
   return (
     <html lang="en" className={`${pacifico.variable} ${poppins.variable}`}>
       <body className="font-sans antialiased bg-base text-ink">
         <ServiceWorkerInit />
-        <TRPCReactProvider>
-          <main className="min-h-screen">{children}</main>
-        </TRPCReactProvider>
+        <FeatureProvider features={features}>
+          <TRPCReactProvider>
+            <main className="min-h-screen">{children}</main>
+          </TRPCReactProvider>
+        </FeatureProvider>
         {process.env.NODE_ENV === "production" && <Analytics />}
       </body>
     </html>

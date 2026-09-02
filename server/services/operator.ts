@@ -125,7 +125,7 @@ export async function listOperatorActivities(
 ): Promise<OperatorActivitySummary[]> {
   const activities = await db.activity.findMany({
     where: { operatorId, status: { not: 'archived' } },
-    include: { _count: { select: { slots: true } } },
+    include: { category: true, _count: { select: { slots: true } } },
     orderBy: { createdAt: 'desc' },
   })
 
@@ -175,6 +175,7 @@ export async function getOperatorActivity(
     // où l'oubli passerait inaperçu en test manuel.
     where: { id: activityId, operatorId },
     include: {
+      category: true,
       slots: {
         orderBy: { startsAt: 'asc' },
         include: { _count: { select: { bookings: true } } },
@@ -254,7 +255,7 @@ export async function createActivity(
       operatorId,
       slug: await uniqueSlug(input.title),
       title: input.title,
-      category: input.category,
+      categoryId: input.categoryId,
       region: input.region,
       duration: input.duration,
       priceHt: input.priceHT,
@@ -268,7 +269,10 @@ export async function createActivity(
       // ne peut atteindre le catalogue que par la modération (lot 8).
       status: 'draft',
     },
-    include: { slots: { include: { _count: { select: { bookings: true } } } } },
+    include: {
+      category: true,
+      slots: { include: { _count: { select: { bookings: true } } } },
+    },
   })
 
   return toOperatorActivityDetail(activity)
@@ -292,7 +296,7 @@ export async function updateActivity(
     where: { id: activityId },
     data: {
       title: input.title,
-      category: input.category,
+      categoryId: input.categoryId,
       region: input.region,
       duration: input.duration,
       priceHt: input.priceHT,

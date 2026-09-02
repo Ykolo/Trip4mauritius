@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { TRPCError } from '@trpc/server'
 import { db } from '@/lib/db'
 import { cancelBooking, createBookings, listMyBookings } from '@/server/services/booking'
+import { testCategoryId } from '@/server/services/test-support'
 
 // Tests d'intégration contre la branche Neon `dev`.
 //
@@ -73,7 +74,7 @@ async function makeActivity(options: {
       operatorId: operator.id,
       slug: `${TEST_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2)}`,
       title: 'Sortie de test',
-      category: 'Test',
+      categoryId: await testCategoryId(),
       region: 'North',
       duration: '2h',
       priceHt: options.pricePerPerson,

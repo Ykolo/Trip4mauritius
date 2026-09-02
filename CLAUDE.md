@@ -42,6 +42,8 @@ types/               contrat de sortie : Activity, ActivityFull, Booking…
 - **Les images d'activité sont des URLs**, pas des fichiers : `data:` est explicitement refusé par le schéma. Un base64 dans `imageUrls` serait relu à chaque affichage du catalogue.
 - **La protection des routes vit dans `proxy.ts`** (`middleware.ts` est déprécié en Next 16 ; le proxy tourne sur le runtime Node). Elle ne lit qu'un cookie : c'est du confort d'UX, **l'autorisation reste dans les procédures tRPC**.
 - **Le service worker (`public/sw.js`) ne met en cache que des ressources publiques et immuables** — `/_next/static/*` et les médias. `/api/` n'est pas intercepté et aucune page HTML n'est stockée : ces réponses dépendent de la session, et les écrire sur le disque les rendrait lisibles hors ligne par l'utilisateur suivant d'un appareil partagé. Changer le cache impose de bumper `CACHE_NAME` (c'est `activate` qui purge les anciens).
+- **Les catégories sont une TABLE, pas un texte libre.** `lib/features.ts` pour les flags, `server/services/category.ts` pour les catégories : dans les deux cas, une seule source. Le front **affiche `category` (libellé)** et **filtre sur `categorySlug`** — les confondre est précisément ce qui cassait le catalogue (trois listes en dur divergentes, vignettes d'accueil sans résultat). Le **slug n'est jamais modifiable** après création : il vit dans l'URL des recherches partagées et indexées. Toute lecture d'activité doit inclure `category` — le type `DbActivityWithCategory` le rend impossible à oublier.
+- **Un interrupteur de fonctionnalité n'est pas une autorisation.** Les flags sont déclarés dans `lib/features.ts` (source unique) et résolus en cascade *défaut ← variable d'environnement ← base*. Masquer un écran avec `useFeature` ne ferme rien : toute fonctionnalité qu'on prétend désactiver doit **aussi** passer par `withFeature()` dans sa procédure tRPC — même raisonnement que `proxy.ts`. Les flags voyagent du layout racine vers le client en props (`FeatureProvider`), jamais par une requête client : sinon l'écran scintille et chaque page paie un aller-retour.
 - **Après un changement de schéma, lancer `prisma generate`** : `next build` ne le fait pas.
 
 ## Commandes
@@ -70,22 +72,24 @@ Les tests d'intégration y visent un **Postgres jetable lancé dans le runner** 
 | Lot | État |
 |---|---|
 | 1 · Fondations Prisma | ✅ 9 contraintes CHECK en base |
-| 2 · Seed | ✅ 22 activités, 504 créneaux, 4 opérateurs, 1 admin |
+| 2 · Seed | ✅ 22 activités, 504 créneaux, 4 opérateurs, 1 admin — **avec identifiants** (`SEED_PASSWORD`) |
 | 3 · Services + tRPC | ✅ |
 | 4 · Lecture publique (RSC) | ✅ vérifié en production |
 | 5 · Auth | ✅ email/mot de passe branché, `proxy.ts` en place — **Google et magic link écartés** |
 | 6 · Réservation | ✅ création, annulation, panier Zustand — 14 tests verts dont la concurrence |
 | 7 · Espace opérateur | ✅ CRUD, créneaux, cloisonnement vérifié par tests |
 | 8 · Admin | ✅ modération, validation des opérateurs, révocation |
+| 9 · Interrupteurs de fonctionnalité | ✅ registre, cascade, garde-fou tRPC, écran `/admin/features` |
+| 10 · Catégories | ✅ table + CRUD admin `/admin/categories`, trois listes en dur supprimées |
+| 11 · Back-office | ✅ listing des réservations (deux contacts par ligne) et des comptes — **lecture seule** |
 
-**37 tests verts** (`npm test`) : concurrence, RULE-001, annulation, cloisonnement opérateur, fuseau, modération.
+**68 tests verts** (`npm test`) : concurrence, RULE-001, annulation, cloisonnement opérateur, fuseau, modération, cascade des flags, catégories, cloisonnement des listings.
 
 ## Dettes assumées — acceptables avant lancement, pas au lancement
 
 - **Vérification d'email désactivée** (pas de Resend) : on peut s'inscrire avec l'adresse d'autrui. Corollaire : le champ email du profil est en lecture seule — changer d'adresse exigerait de vérifier la nouvelle.
 - **Rien ne freine encore la réservation.** Le garde-fou posé au lot 6 (une réservation active par créneau et par compte) empêche l'empilement trivial, mais **il est appliqué dans le service, pas par une contrainte en base** : Prisma ne modélise pas les index partiels et en supprimerait un au prochain `migrate dev`, silencieusement — exactement le risque que la règle sur `db push` existe pour éviter. La garantie tient parce que le contrôle est fait **après** l'UPDATE conditionnel, donc sous le verrou de ligne du créneau. À remplacer par un vrai index partiel le jour où Stripe rend l'acompte bloquant.
 - **Pas d'envoi de fichiers.** Photos d'activité et logo opérateur se saisissent en URL. Vercel Blob n'est pas installé et aucun `BLOB_READ_WRITE_TOKEN` n'est posé — à provisionner avant d'ouvrir aux opérateurs réels, sinon chacun devra héberger ses images ailleurs.
-- ⚠️ **Les comptes du seed n'ont aucun identifiant** : le seed écrit des lignes `User` mais jamais la ligne `Account` qui porte le mot de passe. **Personne ne peut donc se connecter en admin** — l'espace de modération est inatteignable — ni en opérateur du seed. Contournement actuel : s'inscrire, puis `UPDATE "user" SET role='admin'` en base, et se reconnecter. À corriger dans `prisma/seed.ts`, sinon la chaîne de modération n'est pas utilisable de bout en bout.
 - **Comptes de test `@example.com`** présents en production, laissés pour les tests client. À nettoyer avant mise en ligne.
 - **Descriptions d'activités générées** par gabarit dans le seed — à remplacer par de vrais textes.
 - **`images.unoptimized: true`** alors que certaines images pèsent ~1 Mo.

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Globe, ChevronUp, Instagram, MessageCircle, Apple, Shield, Trophy, Zap } from "lucide-react";
 import Image from "next/image";
+import { useFeature } from "@/components/providers/FeatureProvider";
 
 const languages = [
   { code: "fr", label: "Français", flag: "🇫🇷" },
@@ -18,9 +19,12 @@ const currencies = [
 ];
 
 export function Footer() {
+  const showCurrency = useFeature("currency.selector");
+  const showWhatsapp = useFeature("whatsapp.contact");
+
   const [selectedLang, setSelectedLang] = useState(languages[0]);
   const [isLangOpen, setIsLangOpen] = useState(false);
-  
+
   const [selectedCur, setSelectedCur] = useState(currencies[0]);
   const [isCurOpen, setIsCurOpen] = useState(false);
 
@@ -36,9 +40,11 @@ export function Footer() {
             <a href="https://instagram.com/trip4mauritius/" target="_blank" className="w-10 h-10 rounded-full bg-white/15 border border-white/20 flex items-center justify-center text-white hover:bg-white/25 hover:scale-110 transition-all">
               <Instagram className="w-5 h-5" />
             </a>
-            <a href="https://whatsapp.com" target="_blank" className="w-10 h-10 rounded-full bg-white/15 border border-white/20 flex items-center justify-center text-white hover:bg-white/25 hover:scale-110 transition-all">
-              <MessageCircle className="w-5 h-5" />
-            </a>
+            {showWhatsapp && (
+              <a href="https://whatsapp.com" target="_blank" className="w-10 h-10 rounded-full bg-white/15 border border-white/20 flex items-center justify-center text-white hover:bg-white/25 hover:scale-110 transition-all">
+                <MessageCircle className="w-5 h-5" />
+              </a>
+            )}
           </div>
         </div>
         
@@ -78,7 +84,10 @@ export function Footer() {
             )}
           </div>
 
-          {/* Menu Devise */}
+          {/* Menu Devise — masqué tant que `currency.selector` est éteint.
+              Il ne convertit aucun montant : c'est un choix affiché que le
+              reste du site n'honore pas. */}
+          {showCurrency && (
           <div className="relative">
             <button
               onClick={() => setIsCurOpen(!isCurOpen)}
@@ -110,6 +119,7 @@ export function Footer() {
               </>
             )}
           </div>
+          )}
         </div>
 
         {/* Séparateur */}

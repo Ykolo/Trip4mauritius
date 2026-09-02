@@ -6,7 +6,10 @@ import type {
   User as DbUser,
 } from '@prisma/client'
 import { mauritiusDate, mauritiusTime } from '@/lib/datetime'
-import { toDescription } from '@/server/mappers/activity'
+import {
+  toDescription,
+  type DbActivityWithCategory,
+} from '@/server/mappers/activity'
 import type { ActivityStatus } from '@/types/activity'
 import type { BookingStatus } from '@/types/cart'
 import type {
@@ -49,13 +52,17 @@ export function toOperatorSlot(
 }
 
 export function toOperatorActivitySummary(
-  activity: DbActivity & { _count?: { slots: number }; bookingsCount?: number },
+  activity: DbActivityWithCategory & {
+    _count?: { slots: number }
+    bookingsCount?: number
+  },
 ): OperatorActivitySummary {
   return {
     id: activity.id,
     slug: activity.slug,
     title: activity.title,
-    category: activity.category,
+    category: activity.category.label,
+    categoryId: activity.categoryId,
     region: activity.region,
     imageUrl: activity.imageUrls[0] ?? '',
     priceHT: activity.priceHt.toNumber(),
@@ -66,7 +73,7 @@ export function toOperatorActivitySummary(
 }
 
 export function toOperatorActivityDetail(
-  activity: DbActivity & {
+  activity: DbActivityWithCategory & {
     slots: (DbSlot & { _count?: { bookings: number } })[]
     _count?: { slots: number }
   },

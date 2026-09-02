@@ -15,6 +15,7 @@ import {
 } from '@/server/services/operator'
 import { listActivities } from '@/server/services/activity'
 import type { ActivityInput } from '@/lib/schemas/operator'
+import { testCategoryId } from '@/server/services/test-support'
 
 // Le cloisonnement est la propriété critique de ce lot : un opérateur ne doit
 // jamais atteindre les données d'un autre, y compris en devinant un cuid. Ces
@@ -55,12 +56,14 @@ async function makeOperator(label: string) {
   return { userId: user.id, operatorId: operator.id }
 }
 
-function activityInput(overrides: Partial<ActivityInput> = {}): ActivityInput {
+async function activityInput(
+  overrides: Partial<ActivityInput> = {},
+): Promise<ActivityInput> {
   return {
     // Le slug est dérivé du titre : ce préfixe est ce qui rend le nettoyage
     // possible.
     title: `${TEST_PREFIX}sortie ${Math.random().toString(36).slice(2, 8)}`,
-    category: 'Nature',
+    categoryId: await testCategoryId(),
     region: 'North',
     duration: '2 hours',
     description: { fr: 'Une sortie de test.' },
@@ -87,7 +90,7 @@ describe('cloisonnement entre opérateurs', () => {
     const a = await makeOperator('a')
     const b = await makeOperator('b')
 
-    const activityOfB = await createActivity(b.operatorId, activityInput())
+    const activityOfB = await createActivity(b.operatorId, await activityInput())
 
     // A connaît l'id — c'est l'hypothèse du test, pas une faille en soi.
     await expect(
@@ -99,8 +102,8 @@ describe('cloisonnement entre opérateurs', () => {
     const a = await makeOperator('a')
     const b = await makeOperator('b')
 
-    const mine = await createActivity(a.operatorId, activityInput())
-    await createActivity(b.operatorId, activityInput())
+    const mine = await createActivity(a.operatorId, await activityInput())
+    await createActivity(b.operatorId, await activityInput())
 
     const listed = await listOperatorActivities(a.operatorId)
     expect(listed.map((x) => x.id)).toEqual([mine.id])
@@ -110,7 +113,7 @@ describe('cloisonnement entre opérateurs', () => {
     const a = await makeOperator('a')
     const b = await makeOperator('b')
 
-    const activityOfB = await createActivity(b.operatorId, activityInput())
+    const activityOfB = await createActivity(b.operatorId, await activityInput())
     // `createBookings` refuse tout créneau dont l'activité n'est pas publiée —
     // il faut donc la publier pour pouvoir réserver.
     await db.activity.update({
@@ -143,7 +146,7 @@ describe('cloisonnement entre opérateurs', () => {
     const a = await makeOperator('a')
     const b = await makeOperator('b')
 
-    const activityOfB = await createActivity(b.operatorId, activityInput())
+    const activityOfB = await createActivity(b.operatorId, await activityInput())
     const withSlots = await createSlots(b.operatorId, activityOfB.id, [
       { date: tomorrow(), time: '10:00', maxSpots: 5 },
     ])
@@ -162,7 +165,7 @@ describe('cloisonnement entre opérateurs', () => {
 describe('cycle de vie des activités', () => {
   it('crée toujours en brouillon, jamais en ligne', async () => {
     const a = await makeOperator('a')
-    const created = await createActivity(a.operatorId, activityInput())
+    const created = await createActivity(a.operatorId, await activityInput())
 
     // Le statut n'est pas dans l'input du schéma : aucune requête client ne
     // peut publier directement.
@@ -171,7 +174,7 @@ describe('cycle de vie des activités', () => {
 
   it('refuse la soumission tant qu\'aucun créneau n\'existe', async () => {
     const a = await makeOperator('a')
-    const created = await createActivity(a.operatorId, activityInput())
+    const created = await createActivity(a.operatorId, await activityInput())
 
     await expect(
       submitForModeration(a.operatorId, created.id),
@@ -187,7 +190,7 @@ describe('cycle de vie des activités', () => {
 
   it('renvoie en modération une activité publiée que l\'on modifie', async () => {
     const a = await makeOperator('a')
-    const created = await createActivity(a.operatorId, activityInput())
+    const created = await createActivity(a.operatorId, await activityInput())
     await db.activity.update({
       where: { id: created.id },
       data: { status: 'published' },
@@ -196,7 +199,7 @@ describe('cycle de vie des activités', () => {
     const updated = await updateActivity(
       a.operatorId,
       created.id,
-      activityInput({ title: `${TEST_PREFIX}titre remplacé` }),
+      await activityInput({ title: `${TEST_PREFIX}titre remplacé` }),
     )
 
     // Sans cette règle, on ferait valider un texte anodin puis on le
@@ -206,7 +209,7 @@ describe('cycle de vie des activités', () => {
 
   it('archive au lieu de supprimer, et sort du catalogue public', async () => {
     const a = await makeOperator('a')
-    const created = await createActivity(a.operatorId, activityInput())
+    const created = await createActivity(a.operatorId, await activityInput())
     await db.activity.update({
       where: { id: created.id },
       data: { status: 'published' },
@@ -229,8 +232,8 @@ describe('cycle de vie des activités', () => {
     const a = await makeOperator('a')
     const title = `${TEST_PREFIX}meme titre exact`
 
-    const first = await createActivity(a.operatorId, activityInput({ title }))
-    const second = await createActivity(a.operatorId, activityInput({ title }))
+    const first = await createActivity(a.operatorId, await activityInput({ title }))
+    const second = await createActivity(a.operatorId, await activityInput({ title }))
 
     expect(first.slug).not.toBe(second.slug)
   })
@@ -239,7 +242,7 @@ describe('cycle de vie des activités', () => {
 describe('créneaux', () => {
   it('interprète l\'heure saisie comme mauricienne (UTC+4)', async () => {
     const a = await makeOperator('a')
-    const created = await createActivity(a.operatorId, activityInput())
+    const created = await createActivity(a.operatorId, await activityInput())
     const date = tomorrow()
 
     await createSlots(a.operatorId, created.id, [
@@ -262,7 +265,7 @@ describe('créneaux', () => {
 
   it('refuse de supprimer un créneau déjà réservé', async () => {
     const a = await makeOperator('a')
-    const created = await createActivity(a.operatorId, activityInput())
+    const created = await createActivity(a.operatorId, await activityInput())
     await db.activity.update({
       where: { id: created.id },
       data: { status: 'published' },
@@ -296,7 +299,7 @@ describe('créneaux', () => {
 
   it('ignore les doublons quand un planning recouvre l\'existant', async () => {
     const a = await makeOperator('a')
-    const created = await createActivity(a.operatorId, activityInput())
+    const created = await createActivity(a.operatorId, await activityInput())
     const date = tomorrow()
 
     await createSlots(a.operatorId, created.id, [

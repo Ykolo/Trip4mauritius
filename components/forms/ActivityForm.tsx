@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, ChevronLeft, ChevronRight, Loader2, Plus, Trash2 } from 'lucide-react'
 import { useTRPC } from '@/lib/trpc/client'
 import type { ActivityInput } from '@/lib/schemas/operator'
@@ -18,16 +18,12 @@ import type { OperatorActivityDetail } from '@/types/operator'
 //    multilingue. Le français est obligatoire, les autres langues sont
 //    facultatives et retombent sur lui à l'affichage.
 
-const CATEGORIES = [
-  'Water Sports',
-  'Nature',
-  'Adventure',
-  'Cultural',
-  'Wellness',
-  'Gastronomy',
-  'Nightlife',
-  'Family',
-]
+// Les catégories viennent de la base (`activity.categories`).
+//
+// La liste en dur qui vivait ici — « Cultural », « Gastronomy », « Nightlife »,
+// « Family » — ne correspondait ni à celle du tiroir de filtres ni à celle de
+// l'accueil. Un opérateur pouvait classer son activité dans « Nightlife », que
+// personne ne pouvait ensuite filtrer.
 
 const REGIONS = ['North', 'South', 'East', 'West', 'Centre']
 
@@ -59,7 +55,7 @@ type FormState = ActivityInput
 
 const EMPTY: FormState = {
   title: '',
-  category: '',
+  categoryId: '',
   region: '',
   duration: '',
   description: { fr: '', en: '', de: '', es: '', ru: '' },
@@ -74,7 +70,7 @@ const EMPTY: FormState = {
 function fromDetail(detail: OperatorActivityDetail): FormState {
   return {
     title: detail.title,
-    category: detail.category,
+    categoryId: detail.categoryId,
     region: detail.region,
     duration: detail.duration,
     description: detail.description,
@@ -164,6 +160,13 @@ export function ActivityForm({
     activity ? fromDetail(activity) : EMPTY,
   )
 
+  // Seules les catégories ACTIVES sont proposées. Une activité déjà classée
+  // dans une catégorie désactivée garde la sienne — c'est `fromDetail` qui la
+  // pose — mais personne ne peut plus en choisir une nouvelle.
+  const { data: categories = [] } = useQuery(
+    trpc.activity.categories.queryOptions(),
+  )
+
   const invalidate = () => {
     queryClient.invalidateQueries({
       queryKey: trpc.operator.listActivities.queryKey(),
@@ -200,7 +203,7 @@ export function ActivityForm({
       case 1:
         return Boolean(
           form.title.trim().length >= 3 &&
-            form.category &&
+            form.categoryId &&
             form.region &&
             form.description.fr.trim(),
         )
@@ -299,14 +302,17 @@ export function ActivityForm({
                 Catégorie *
               </label>
               <select
-                value={form.category}
-                onChange={(e) => set('category', e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-surface bg-base focus:outline-none focus:ring-2 focus:ring-primary/30"
+                value={form.categoryId}
+                onChange={(e) => set('categoryId', e.target.value)}
+                disabled={categories.length === 0}
+                className="w-full px-4 py-3 rounded-xl border border-surface bg-base focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
               >
-                <option value="">Choisir…</option>
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
+                <option value="">
+                  {categories.length === 0 ? 'Chargement…' : 'Choisir…'}
+                </option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.emoji ? `${c.emoji} ${c.label}` : c.label}
                   </option>
                 ))}
               </select>

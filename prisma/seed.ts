@@ -1,6 +1,8 @@
 import 'dotenv/config'
+import { randomBytes } from 'node:crypto'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { ActivityStatus, PrismaClient, UserRole } from '@prisma/client'
+import { hashPassword } from 'better-auth/crypto'
 
 // Le seed reprend les données qui vivaient dans lib/hooks/useActivities.ts.
 // À partir d'ici, la base fait autorité : le mock sera supprimé au lot 4.
@@ -148,6 +150,66 @@ function buildExcluded(a: SeedActivity): string[] {
   return ['Pourboires', 'Dépenses personnelles', 'Transferts hôtel']
 }
 
+// --------------------------------------------------------------------------
+// Identifiants
+//
+// Le seed écrivait des lignes `user` mais jamais la ligne `account` qui porte
+// le mot de passe : les comptes créés ici — y compris l'unique admin —
+// existaient sans qu'aucun d'eux ne puisse se connecter. L'espace de
+// modération était donc inatteignable.
+//
+// Les trois valeurs ci-dessous ne sont pas devinées : elles sont relevées sur
+// les lignes `account` que Better Auth 1.7 écrit lui-même à l'inscription. Une
+// seule erreur (un `issuer` différent, un `accountId` qui ne vaut pas l'id de
+// l'utilisateur) ne lève aucune exception — la connexion échoue simplement,
+// comme si le mot de passe était faux.
+// --------------------------------------------------------------------------
+
+const CREDENTIAL_PROVIDER_ID = 'credential'
+const CREDENTIAL_ISSUER = 'local:credential'
+
+/** Doit rester aligné sur `minPasswordLength` dans lib/auth.ts. */
+const MIN_PASSWORD_LENGTH = 12
+
+function resolveSeedPassword(): { password: string; generated: boolean } {
+  const provided = process.env.SEED_PASSWORD?.trim()
+
+  if (provided) {
+    if (provided.length < MIN_PASSWORD_LENGTH) {
+      throw new Error(
+        `SEED_PASSWORD fait ${provided.length} caractères ; l'application en exige ${MIN_PASSWORD_LENGTH}. ` +
+          'Le seed écrirait un mot de passe que le formulaire de connexion refuserait.',
+      )
+    }
+    return { password: provided, generated: false }
+  }
+
+  // Pas de mot de passe par défaut en dur : il finirait committé, puis en
+  // production. On en tire un au hasard et on l'affiche une fois.
+  return { password: randomBytes(12).toString('base64url'), generated: true }
+}
+
+async function setPassword(userId: string, password: string): Promise<void> {
+  const hash = await hashPassword(password)
+
+  await db.account.upsert({
+    where: {
+      providerId_accountId: {
+        providerId: CREDENTIAL_PROVIDER_ID,
+        accountId: userId,
+      },
+    },
+    create: {
+      userId,
+      providerId: CREDENTIAL_PROVIDER_ID,
+      issuer: CREDENTIAL_ISSUER,
+      accountId: userId,
+      password: hash,
+    },
+    update: { password: hash },
+  })
+}
+
 function operatorKeyFor(category: string): string {
   const match = OPERATORS.find((o) => (o.categories as readonly string[]).includes(category))
   return (match ?? OPERATORS[1]).key
@@ -155,6 +217,8 @@ function operatorKeyFor(category: string): string {
 
 async function main() {
   console.log('→ Seed MauriExplore')
+
+  const { password: seedPassword, generated } = resolveSeedPassword()
 
   // Admin : créé uniquement ici, jamais par l'application. Aucun endpoint ne
   // doit pouvoir fabriquer un compte admin.
@@ -169,10 +233,11 @@ async function main() {
       locale: 'fr',
     },
   })
+  await setPassword(admin.id, seedPassword)
   console.log(`  admin: ${admin.email}`)
 
   // Un touriste de test, pour pouvoir exercer le tunnel de réservation.
-  await db.user.upsert({
+  const tourist = await db.user.upsert({
     where: { email: 'tourist@example.com' },
     update: {},
     create: {
@@ -183,6 +248,7 @@ async function main() {
       locale: 'fr',
     },
   })
+  await setPassword(tourist.id, seedPassword)
 
   const operatorIdByKey = new Map<string, string>()
   for (const op of OPERATORS) {
@@ -198,6 +264,8 @@ async function main() {
       },
     })
 
+    await setPassword(user.id, seedPassword)
+
     const operator = await db.operator.upsert({
       where: { userId: user.id },
       update: { displayName: op.displayName, verified: op.verified },
@@ -208,9 +276,27 @@ async function main() {
   }
   console.log(`  opérateurs: ${operatorIdByKey.size}`)
 
+  // Les catégories viennent de la migration `add_categories`, qui a repris les
+  // valeurs existantes. Le seed s'y rattache, il ne les réinvente pas : deux
+  // listes de catégories divergeraient dès la première création depuis
+  // /admin/categories.
+  const categoryIdByLabel = new Map(
+    (await db.category.findMany({ select: { id: true, label: true } })).map(
+      (c) => [c.label, c.id],
+    ),
+  )
+
   let slotCount = 0
   for (const a of ACTIVITIES) {
     const operatorId = operatorIdByKey.get(operatorKeyFor(a.category))!
+    const categoryId = categoryIdByLabel.get(a.category)
+
+    if (!categoryId) {
+      throw new Error(
+        `Catégorie « ${a.category} » absente de la table categories. ` +
+          'Lancer `npm run db:deploy` avant le seed.',
+      )
+    }
 
     const activity = await db.activity.upsert({
       where: { slug: a.slug },
@@ -219,7 +305,7 @@ async function main() {
         operatorId,
         slug: a.slug,
         title: a.title,
-        category: a.category,
+        categoryId,
         region: a.region,
         duration: a.duration,
         priceHt: a.priceHt,
@@ -253,6 +339,15 @@ async function main() {
   console.log(`  activités: ${ACTIVITIES.length}`)
   console.log(`  créneaux: ${slotCount}`)
   console.log('✓ Seed terminé')
+
+  console.log('')
+  console.log('  Connexion — admin@mauriexplore.mu, les 4 opérateurs et tourist@example.com')
+  if (generated) {
+    console.log(`  Mot de passe TIRÉ AU HASARD : ${seedPassword}`)
+    console.log('  Il ne sera plus affiché. Poser SEED_PASSWORD pour en choisir un.')
+  } else {
+    console.log('  Mot de passe : celui de SEED_PASSWORD.')
+  }
 }
 
 main()

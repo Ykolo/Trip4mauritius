@@ -2,6 +2,8 @@ import { initTRPC, TRPCError } from '@trpc/server'
 import type { UserRole } from '@prisma/client'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
+import type { FeatureKey, FeatureMap } from '@/lib/features'
+import { getFeatures } from '@/server/services/features'
 
 // Contexte et procédures tRPC.
 //
@@ -21,6 +23,8 @@ export type TRPCContext = {
   db: typeof db
   headers: Headers
   user: SessionUser | null
+  /** Interrupteurs résolus une fois par requête. Voir `withFeature`. */
+  features: FeatureMap
 }
 
 /**
@@ -49,11 +53,14 @@ async function getSessionUser(headers: Headers): Promise<SessionUser | null> {
 export async function createTRPCContext(opts: {
   headers: Headers
 }): Promise<TRPCContext> {
-  return {
-    db,
-    headers: opts.headers,
-    user: await getSessionUser(opts.headers),
-  }
+  // Les deux lectures sont indépendantes : les enchaîner ajouterait la latence
+  // de l'une à celle de l'autre sur chaque appel.
+  const [user, features] = await Promise.all([
+    getSessionUser(opts.headers),
+    getFeatures(),
+  ])
+
+  return { db, headers: opts.headers, user, features }
 }
 
 const t = initTRPC.context<TRPCContext>().create()
@@ -104,3 +111,29 @@ export const adminProcedure = protectedProcedure.use(async ({ ctx, next }) => {
   }
   return next({ ctx })
 })
+
+/**
+ * Refuse une procédure quand son interrupteur est éteint.
+ *
+ * C'est le garde-fou RÉEL d'une fonctionnalité désactivée. Masquer le bouton
+ * côté écran ne ferme rien : la procédure reste appelable directement, comme
+ * n'importe quel appel d'API. Toute fonctionnalité qu'on prétend désactiver
+ * doit passer par ici.
+ *
+ * `PRECONDITION_FAILED` et non `FORBIDDEN` : le compte a bien le droit, c'est
+ * la plateforme qui a fermé la porte. Confondre les deux enverrait un
+ * utilisateur légitime se demander ce qu'il a fait de mal.
+ *
+ *     requestAccess: protectedProcedure.use(withFeature('operator.selfSignup'))
+ */
+export function withFeature(key: FeatureKey) {
+  return t.middleware(({ ctx, next }) => {
+    if (!ctx.features[key]) {
+      throw new TRPCError({
+        code: 'PRECONDITION_FAILED',
+        message: "Cette fonctionnalité est actuellement désactivée.",
+      })
+    }
+    return next()
+  })
+}

@@ -103,6 +103,7 @@ export default function AdminOverviewPage() {
               label="Réservations confirmées"
               value={data.totalBookings}
               icon={Ticket}
+              href="/admin/bookings"
             />
           </div>
         </>

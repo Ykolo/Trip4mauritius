@@ -16,32 +16,21 @@ Le formulaire d'inscription ne propose aucun choix de rôle, et c'est délibér�
 
 ---
 
-## ⚠️ Avant de commencer : le problème des comptes
+## Avant de commencer : les comptes du seed
 
-**Les comptes créés par le seed n'ont aucun identifiant.** Le seed écrit des lignes `User` mais jamais la ligne `Account` qui porte le mot de passe. Concrètement :
+Le seed crée des comptes **connectables**, tous avec le même mot de passe :
 
-| Compte | Rôle | Connexion |
+| Compte | Rôle | Sert à |
 |---|---|---|
-| `admin@mauriexplore.mu` | admin | ❌ impossible |
-| `contact@blue-safari.mu` et les 3 autres | operator | ❌ impossible |
-| `tourist@example.com` | tourist | ❌ impossible |
+| `admin@mauriexplore.mu` | admin | Modération, validation des opérateurs, interrupteurs |
+| `contact@blue-safari.mu` et les 3 autres | operator | Gérer les activités déjà publiées |
+| `tourist@example.com` | tourist | Exercer le tunnel de réservation |
 
-**Conséquence : l'espace d'administration n'est atteignable par personne**, et les 4 opérateurs du seed ne peuvent pas gérer leurs activités — alors que celles-ci sont bien publiées et réservables.
+Le mot de passe est celui de la variable d'environnement `SEED_PASSWORD` (12 caractères minimum). Si elle n'est pas posée, `npm run db:seed` en tire un au hasard et **l'affiche une seule fois** en fin d'exécution — notez-le à ce moment-là, ou relancez le seed avec `SEED_PASSWORD` posée.
 
-### Ce qui marche aujourd'hui
+Relancer le seed réécrit ces mots de passe ; il ne touche à aucun autre compte.
 
-- **Touriste** : inscrivez-vous normalement sur `/register`. Ça fonctionne, la vérification d'email étant désactivée (voir *Limites* plus bas).
-- **Opérateur** : inscrivez-vous, puis faites la demande d'accès (§ *Devenir opérateur*). Il faut ensuite un admin pour valider.
-- **Admin** : il faut promouvoir un compte **directement en base**, aucun écran ne le permet :
-
-  ```sql
-  -- Sur la branche Neon visée, après s'être inscrit avec cette adresse
-  UPDATE "user" SET role = 'admin' WHERE email = 'votre@adresse.test';
-  ```
-
-  Puis **se déconnecter et se reconnecter** : le rôle voyage dans la session, qui est mise en cache 5 minutes.
-
-> **À corriger** : le seed devrait créer un mot de passe pour au moins le compte admin, sinon la chaîne de modération n'est pas utilisable de bout en bout.
+> **Le rôle voyage dans la session, mise en cache 5 minutes.** Après toute promotion (validation d'un opérateur, par exemple), il faut **se déconnecter et se reconnecter** pour que le nouveau rôle prenne effet.
 
 ---
 
@@ -157,6 +146,17 @@ Ce qui attend une décision — activités à modérer, demandes d'opérateur �
 
 Les brouillons n'apparaissent dans aucune file : tant qu'un opérateur n'a pas soumis, son travail lui appartient.
 
+### Suivre les réservations
+
+`/admin/bookings` liste **toutes** les réservations de la plateforme. Chaque ligne porte les coordonnées du **client** et de l'**opérateur**, cliquables : c'est ce qui permet de les mettre en relation à la main, sans ouvrir la base.
+
+- La recherche accepte indifféremment une **référence** (`MX-2026-000123`), un **nom** ou un **email**.
+- L'écran s'ouvre sur les départs **à venir**, les plus proches d'abord — les seuls sur lesquels il reste quelque chose à faire.
+
+### Consulter les comptes
+
+`/admin/users` : qui s'est inscrit, avec quel rôle, combien de réservations. **En lecture seule.** Les rôles se changent depuis *Opérateurs*, et aucun écran ne sait fabriquer un admin.
+
 ### Valider et révoquer les opérateurs
 
 `/admin/operators` sépare les **demandes en attente** des **opérateurs actifs**, avec l'identité réelle derrière chaque nom commercial — c'est sur elle que porte la décision.
@@ -165,6 +165,35 @@ Les brouillons n'apparaissent dans aucune file : tant qu'un opérateur n'a pas s
 - **Révoquer** retire le badge, repasse le compte en touriste, et **archive toutes ses activités en ligne**. Laisser les fiches en place viderait la révocation de son sens. Les réservations déjà prises restent honorées.
 
 Un compte administrateur ne peut pas être révoqué depuis cet écran.
+
+### Gérer les catégories
+
+`/admin/categories` est le catalogue des catégories : ce que les touristes voient dans les filtres et sur l'accueil, et ce parmi quoi les opérateurs choisissent en publiant.
+
+- **Créer** — donnez un libellé (et un emoji, une image). L'adresse est dérivée du libellé et **ne changera plus jamais** ensuite : elle vit dans les liens de recherche que les touristes partagent et que Google a indexés.
+- **Renommer** — libre, à tout moment. Seul l'affichage change ; les liens existants continuent de fonctionner.
+- **Ordonner** — les flèches. C'est cet ordre qu'on retrouve sur l'accueil et dans les filtres.
+- **Masquer** — retire la catégorie des filtres et du formulaire opérateur. Les activités déjà classées dedans **restent en ligne** : les déréférencer parce que vous rangez votre liste serait une sanction sans rapport.
+
+Une catégorie ne se **supprime** pas. Les activités qui la référencent en dépendent, et la base refuse. C'est à ça que sert « masquer ».
+
+### Activer et désactiver des fonctionnalités
+
+`/admin/features` permet d'éteindre ou de rallumer une fonctionnalité **sans redéployer le site**. Chaque interrupteur indique ce qu'il change concrètement, qui l'a basculé en dernier et quand.
+
+Trois fonctionnalités sont pilotables aujourd'hui :
+
+| Interrupteur | Ce qu'il change |
+|---|---|
+| **Inscription autonome des opérateurs** | Éteint, le formulaire « Devenir opérateur » disparaît et la demande est refusée côté serveur. Les profils opérateur ne peuvent plus être créés que par vous |
+| **Sélecteur de devise** | Éteint, le menu de devise du pied de page disparaît. ⚠️ Il ne convertit rien aujourd'hui : tous les montants restent en euros. Le laisser allumé promet un choix que le site n'honore pas |
+| **Contact WhatsApp** | Éteint, les points d'entrée WhatsApp disparaissent |
+
+Trois choses à savoir :
+
+- **La bascule met jusqu'à une minute** à se propager à toutes les instances du site. C'est le prix d'un cache qui évite une requête base à chaque affichage de page.
+- **« Rendre la main »** n'est pas la même chose qu'éteindre : ça efface votre décision et laisse reparler la configuration de l'environnement, puis la valeur par défaut du code.
+- **Éteindre une fonctionnalité la ferme réellement**, pas seulement à l'écran. Quelqu'un qui appellerait l'API directement se fait refuser aussi.
 
 ---
 
@@ -179,7 +208,6 @@ Ce qui n'est pas encore en place. Ce sont des choix assumés à ce stade, pas de
 | **Aucun reversement aux opérateurs** | `/operator/wallet` est un relevé. Maurice ne figure pas dans les pays supportés par Stripe : le circuit reste à définir |
 | **Pas d'envoi de fichiers** | Photos d'activité et logos se saisissent en URL |
 | **Le panier ne suit pas l'utilisateur** | Il vit dans le navigateur : changer d'appareil le vide |
-| **Comptes du seed inutilisables** | Voir l'avertissement en tête de ce guide |
 | **Pas d'avis clients** | Les notes affichées viennent du seed et ne sont alimentées par rien |
 
 ---
@@ -193,4 +221,4 @@ Ce qui n'est pas encore en place. Ce sont des choix assumés à ce stade, pas de
 | `/checkout` | connecté | Tunnel de réservation |
 | `/bookings` · `/account` | connecté | Réservations et profil |
 | `/operator/*` | opérateur validé | Activités, créneaux, passagers, relevé |
-| `/admin/*` | admin | Modération, opérateurs |
+| `/admin/*` | admin | Modération, réservations, opérateurs, comptes, catégories, interrupteurs |

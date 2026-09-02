@@ -28,6 +28,7 @@ import {
   createTRPCRouter,
   operatorProcedure,
   protectedProcedure,
+  withFeature,
 } from '@/server/trpc/init'
 
 // Router mince : valider, autoriser, déléguer.
@@ -47,7 +48,11 @@ export const operatorRouter = createTRPCRouter({
     getMyOperatorProfile(ctx.user.id),
   ),
 
+  // Fermée quand `operator.selfSignup` est éteint. Le formulaire disparaît
+  // aussi côté écran, mais c'est CE garde-fou qui compte : cacher un bouton ne
+  // rend pas la mutation inappelable.
   requestAccess: protectedProcedure
+    .use(withFeature('operator.selfSignup'))
     .input(requestAccessSchema)
     .mutation(({ ctx, input }) =>
       requestOperatorAccess(ctx.user.id, input.displayName),

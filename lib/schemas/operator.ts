@@ -34,7 +34,10 @@ const imageUrl = z
 
 export const activityInputSchema = z.object({
   title: z.string().trim().min(3).max(120),
-  category: z.string().trim().min(1),
+  // L'id d'une catégorie existante, plus un texte libre : la clé étrangère
+  // refuse une valeur inventée. Avant, un opérateur pouvait écrire n'importe
+  // quoi et son activité n'apparaissait dans aucun filtre.
+  categoryId: z.string().trim().min(1),
   region: z.string().trim().min(1),
   duration: z.string().trim().min(1),
   description: activityDescriptionSchema,

@@ -3,7 +3,6 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { Suspense } from 'react'
 import { Shield, Trophy, Zap } from 'lucide-react'
 
 import { HeroSection } from '@/components/ui/HeroSection'
@@ -23,6 +22,7 @@ const FEATURED_ACTIVITIES: Activity[] = [
     slug: 'le-morne-hiking',
     title: 'Randonnée Guidée au Morne Brabant',
     category: 'Terre',
+    categorySlug: 'nature',
     region: 'South',
     duration: '4 heures',
     priceFrom: 45,
@@ -35,6 +35,7 @@ const FEATURED_ACTIVITIES: Activity[] = [
     slug: 'helicopter-underwater-waterfall',
     title: 'Survol Immergé : Cascade Sous-Marine',
     category: 'Air',
+    categorySlug: 'aventure',
     region: 'South',
     duration: '45 min',
     priceFrom: 340,
@@ -47,6 +48,7 @@ const FEATURED_ACTIVITIES: Activity[] = [
     slug: 'kitesurf-le-morne',
     title: 'Session Kitesurf Lagon Bel Ombre',
     category: 'Nautique',
+    categorySlug: 'sports-nautiques',
     region: 'South',
     duration: '2 heures',
     priceFrom: 110,
@@ -59,6 +61,7 @@ const FEATURED_ACTIVITIES: Activity[] = [
     slug: 'rhumerie-chamarel-tasting',
     title: 'Dégustation Rhumerie de Chamarel',
     category: 'Gastronomie',
+    categorySlug: 'gastronomie',
     region: 'Centre',
     duration: '1.5 heures',
     priceFrom: 35,
@@ -71,6 +74,7 @@ const FEATURED_ACTIVITIES: Activity[] = [
     slug: 'catamaran-ile-aux-cerfs-premium',
     title: 'Catamaran Premium à l\'Île aux Cerfs',
     category: 'Mer',
+    categorySlug: 'croisieres',
     region: 'East',
     duration: 'Journée',
     priceFrom: 85,
@@ -143,9 +147,7 @@ export default function HomePage() {
         <h2 className="text-2xl md:text-3xl font-semibold text-ink mb-4">
           Catégories Populaires
         </h2>
-        <Suspense fallback={<div className="h-12" />}>
-          <CategoryChips />
-        </Suspense>
+        <CategoryChips />
       </motion.section>
       
       {/* Featured Activities */}
