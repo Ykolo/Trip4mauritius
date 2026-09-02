@@ -276,9 +276,27 @@ async function main() {
   }
   console.log(`  opérateurs: ${operatorIdByKey.size}`)
 
+  // Les catégories viennent de la migration `add_categories`, qui a repris les
+  // valeurs existantes. Le seed s'y rattache, il ne les réinvente pas : deux
+  // listes de catégories divergeraient dès la première création depuis
+  // /admin/categories.
+  const categoryIdByLabel = new Map(
+    (await db.category.findMany({ select: { id: true, label: true } })).map(
+      (c) => [c.label, c.id],
+    ),
+  )
+
   let slotCount = 0
   for (const a of ACTIVITIES) {
     const operatorId = operatorIdByKey.get(operatorKeyFor(a.category))!
+    const categoryId = categoryIdByLabel.get(a.category)
+
+    if (!categoryId) {
+      throw new Error(
+        `Catégorie « ${a.category} » absente de la table categories. ` +
+          'Lancer `npm run db:deploy` avant le seed.',
+      )
+    }
 
     const activity = await db.activity.upsert({
       where: { slug: a.slug },
@@ -287,7 +305,7 @@ async function main() {
         operatorId,
         slug: a.slug,
         title: a.title,
-        category: a.category,
+        categoryId,
         region: a.region,
         duration: a.duration,
         priceHt: a.priceHt,

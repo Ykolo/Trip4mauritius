@@ -57,6 +57,7 @@ export async function listActivitiesForModeration(
     where: { status },
     include: {
       operator: true,
+      category: true,
       _count: { select: { slots: true } },
     },
     orderBy: { updatedAt: 'asc' },
@@ -79,7 +80,7 @@ export async function listActivitiesForModeration(
     id: activity.id,
     slug: activity.slug,
     title: activity.title,
-    category: activity.category,
+    category: activity.category.label,
     region: activity.region,
     imageUrl: activity.imageUrls[0] ?? '',
     imageUrls: activity.imageUrls,

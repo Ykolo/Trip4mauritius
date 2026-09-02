@@ -3,7 +3,13 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
-import { LayoutDashboard, ShieldCheck, Store, ToggleLeft } from 'lucide-react'
+import {
+  LayoutDashboard,
+  ShieldCheck,
+  Store,
+  Tags,
+  ToggleLeft,
+} from 'lucide-react'
 import { AdminGuard } from '@/components/layout/AdminGuard'
 import { useTRPC } from '@/lib/trpc/client'
 
@@ -11,6 +17,7 @@ const TABS = [
   { href: '/admin', label: "Vue d'ensemble", icon: LayoutDashboard },
   { href: '/admin/moderation', label: 'Modération', icon: ShieldCheck },
   { href: '/admin/operators', label: 'Opérateurs', icon: Store },
+  { href: '/admin/categories', label: 'Catégories', icon: Tags },
   { href: '/admin/features', label: 'Fonctionnalités', icon: ToggleLeft },
 ]
 

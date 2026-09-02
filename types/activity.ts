@@ -25,7 +25,10 @@ export interface Activity {
   id: string
   slug: string
   title: string
+  /** Libellé affiché — celui que l'admin peut renommer. */
   category: string
+  /** Valeur de filtrage, stable dans l'URL. Ne jamais afficher l'un pour l'autre. */
+  categorySlug: string
   region: string
   duration: string
   priceFrom: number

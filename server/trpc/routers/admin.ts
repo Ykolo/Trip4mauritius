@@ -1,9 +1,13 @@
 import {
   activityIdSchema,
   moderationQueueSchema,
+  createCategorySchema,
+  moveCategorySchema,
   operatorIdSchema,
   resetFeatureSchema,
+  setCategoryActiveSchema,
   setFeatureSchema,
+  updateCategorySchema,
 } from '@/lib/schemas/admin'
 import {
   approveOperator,
@@ -14,6 +18,13 @@ import {
   rejectActivity,
   revokeOperator,
 } from '@/server/services/admin'
+import {
+  createCategory,
+  listCategoriesForAdmin,
+  moveCategory,
+  setCategoryActive,
+  updateCategory,
+} from '@/server/services/category'
 import {
   listFeatureFlags,
   resetFeatureFlag,
@@ -66,4 +77,27 @@ export const adminRouter = createTRPCRouter({
     .input(resetFeatureSchema)
     .mutation(({ input }) => resetFeatureFlag(input.key)),
 
+  categories: adminProcedure.query(() => listCategoriesForAdmin()),
+
+  createCategory: adminProcedure
+    .input(createCategorySchema)
+    .mutation(({ input }) => createCategory(input)),
+
+  updateCategory: adminProcedure
+    .input(updateCategorySchema)
+    .mutation(({ input }) =>
+      updateCategory(input.categoryId, {
+        label: input.label,
+        emoji: input.emoji,
+        imageUrl: input.imageUrl,
+      }),
+    ),
+
+  setCategoryActive: adminProcedure
+    .input(setCategoryActiveSchema)
+    .mutation(({ input }) => setCategoryActive(input.categoryId, input.active)),
+
+  moveCategory: adminProcedure
+    .input(moveCategorySchema)
+    .mutation(({ input }) => moveCategory(input.categoryId, input.direction)),
 })

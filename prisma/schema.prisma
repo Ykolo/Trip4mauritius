@@ -159,13 +159,49 @@ model Operator {
   @@map("operators")
 }
 
+/// Catalogue des catégories, administré depuis /admin/categories.
+///
+/// Avant, `Activity.category` était un texte libre et la liste des choix
+/// vivait en dur dans TROIS composants qui ne disaient pas la même chose :
+/// l'accueil filtrait sur `diving`/`mer`/`terre`, les filtres sur « Sports
+/// Nautiques », et le formulaire opérateur écrivait « Water Sports ». Les
+/// vignettes de l'accueil ne renvoyaient donc aucun résultat.
+///
+/// `slug` est ce qui voyage dans l'URL (`/activities?category=water-sports`) :
+/// le changer casse les liens partagés et les favoris.
+model Category {
+  id       String  @id @default(cuid())
+  slug     String  @unique
+  label    String  @unique
+  emoji    String?
+  imageUrl String?
+
+  /// Ordre d'affichage choisi par l'admin ; l'ordre alphabétique mettrait
+  /// « Aventure » avant « Sports nautiques » sur une île où l'on vient d'abord
+  /// pour la mer.
+  position Int @default(0)
+
+  /// Une catégorie ne se supprime pas — la clé étrangère des activités le
+  /// refuserait. On la désactive : elle disparaît des filtres et du
+  /// formulaire, les activités déjà classées dedans restent intactes.
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  activities Activity[]
+
+  @@index([active, position])
+  @@map("categories")
+}
+
 model Activity {
   id         String @id @default(cuid())
   operatorId String
+  categoryId String
   slug       String @unique
 
   title    String
-  category String
   region   String
   duration String
 
@@ -193,10 +229,14 @@ model Activity {
   updatedAt DateTime @updatedAt
 
   operator Operator       @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  // Restrict, comme slots→bookings : une catégorie encore utilisée ne doit pas
+  // pouvoir disparaître sous les activités qui la référencent.
+  category Category       @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   slots    ActivitySlot[]
 
-  @@index([status, region, category])
+  @@index([status, region, categoryId])
   @@index([operatorId])
+  @@index([categoryId])
   @@map("activities")
 }
 

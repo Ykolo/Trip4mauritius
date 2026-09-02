@@ -21,7 +21,10 @@ function publicWhere(filters: ActivityFiltersInput): Prisma.ActivityWhereInput {
   }
 
   if (filters.region) where.region = { in: filters.region }
-  if (filters.category) where.category = { in: filters.category }
+  // Le filtre porte sur le SLUG, jamais sur le libellé : celui-ci est
+  // renommable depuis /admin/categories, et un renommage ne doit pas vider les
+  // liens déjà partagés.
+  if (filters.category) where.category = { slug: { in: filters.category } }
   if (filters.duration) where.duration = filters.duration
   if (filters.lang) where.languages = { hasSome: filters.lang }
 
@@ -44,6 +47,7 @@ export async function listActivities(
   const [rows, total] = await Promise.all([
     db.activity.findMany({
       where,
+      include: { category: true },
       orderBy: [{ rating: 'desc' }, { title: 'asc' }],
       skip: (page - 1) * ITEMS_PER_PAGE,
       take: ITEMS_PER_PAGE,
@@ -65,6 +69,7 @@ export async function getActivityBySlug(
     where: { slug, status: ActivityStatus.published },
     include: {
       operator: true,
+      category: true,
       slots: {
         // Uniquement les créneaux à venir : proposer une date passée est au
         // mieux déroutant, au pire une réservation impossible à honorer.

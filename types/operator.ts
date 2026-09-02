@@ -42,7 +42,10 @@ export interface OperatorActivitySummary {
   id: string
   slug: string
   title: string
+  /** Libellé affiché. */
   category: string
+  /** Id de la catégorie — ce que le formulaire d'édition doit pré-sélectionner. */
+  categoryId: string
   region: string
   imageUrl: string
   priceHT: number

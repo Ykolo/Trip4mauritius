@@ -1,11 +1,25 @@
 'use client'
 
 import { motion, AnimatePresence } from 'framer-motion'
+import { useQuery } from '@tanstack/react-query'
+import { useTRPC } from '@/lib/trpc/client'
 import type { ActivityFilters } from '@/types/activity'
 
 const REGIONS = ['Nord', 'Sud', 'Est', 'Ouest', 'Centre']
-const CATEGORIES = ['Sports Nautiques', 'Nature', 'Croisières', 'Excursions', 'Culture', 'Gastronomie', 'Aventure', 'Bien-être', 'Véhicules']
 const DURATIONS = ['Toutes', '< 2h', 'Demi-journée', 'Journée', 'Plusieurs jours']
+
+// Les catégories viennent de la base — la liste en dur qui vivait ici affichait
+// « Sports Nautiques », « Croisières », « Bien-être », alors que la base
+// contenait « Water Sports », « Cruises », « Wellness ». Cocher un filtre
+// renvoyait donc zéro résultat.
+//
+// On coche un LIBELLÉ, on filtre sur un SLUG : le libellé est renommable depuis
+// /admin/categories, le slug non.
+function useCategoryOptions() {
+  const trpc = useTRPC()
+  const { data } = useQuery(trpc.activity.categories.queryOptions())
+  return data ?? []
+}
 
 interface FilterDrawerProps {
   filters: ActivityFilters
@@ -15,6 +29,8 @@ interface FilterDrawerProps {
 }
 
 export function FilterDrawer({ filters, onFiltersChange, onClose, isOpen }: FilterDrawerProps) {
+  const categories = useCategoryOptions()
+
   const handleRegionToggle = (region: string) => {
     const current = filters.region || []
     const updated = current.includes(region)
@@ -96,12 +112,12 @@ export function FilterDrawer({ filters, onFiltersChange, onClose, isOpen }: Filt
               {/* Category */}
               <FilterSection title="Catégorie">
                 <div className="flex flex-wrap gap-2">
-                  {CATEGORIES.map(category => (
+                  {categories.map(category => (
                     <CheckboxChip
-                      key={category}
-                      label={category}
-                      checked={(filters.category || []).includes(category)}
-                      onChange={() => handleCategoryToggle(category)}
+                      key={category.slug}
+                      label={category.label}
+                      checked={(filters.category || []).includes(category.slug)}
+                      onChange={() => handleCategoryToggle(category.slug)}
                     />
                   ))}
                 </div>
@@ -228,6 +244,8 @@ function PriceRangeSlider({ min, max, onChange }: { min: number; max: number; on
 
 // Desktop sidebar version
 export function FilterSidebar({ filters, onFiltersChange }: Omit<FilterDrawerProps, 'onClose' | 'isOpen'>) {
+  const categories = useCategoryOptions()
+
   const handleRegionToggle = (region: string) => {
     const current = filters.region || []
     const updated = current.includes(region)
@@ -296,15 +314,15 @@ export function FilterSidebar({ filters, onFiltersChange }: Omit<FilterDrawerPro
       {/* Category */}
       <FilterSection title="Catégorie">
         <div className="space-y-2">
-          {CATEGORIES.map(category => (
-            <label key={category} className="flex items-center gap-3 cursor-pointer">
+          {categories.map(category => (
+            <label key={category.slug} className="flex items-center gap-3 cursor-pointer">
               <input
                 type="checkbox"
-                checked={(filters.category || []).includes(category)}
-                onChange={() => handleCategoryToggle(category)}
+                checked={(filters.category || []).includes(category.slug)}
+                onChange={() => handleCategoryToggle(category.slug)}
                 className="w-4 h-4 rounded border-muted accent-primary"
               />
-              <span className="text-sm text-ink">{category}</span>
+              <span className="text-sm text-ink">{category.label}</span>
             </label>
           ))}
         </div>

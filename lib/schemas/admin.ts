@@ -37,3 +37,30 @@ export const resetFeatureSchema = z.object({
   key: featureKeySchema,
 })
 
+// Catégories.
+//
+// Aucun schéma n'accepte de `slug` : il est dérivé du libellé à la création et
+// n'est PLUS jamais modifiable. Il vit dans l'URL des recherches filtrées, que
+// les touristes partagent et que les moteurs ont indexées.
+const categoryFields = {
+  label: z.string().trim().min(2).max(40),
+  emoji: z.string().trim().max(8).optional(),
+  imageUrl: z.string().trim().max(500).optional(),
+}
+
+export const createCategorySchema = z.object(categoryFields)
+
+export const updateCategorySchema = z.object({
+  categoryId: z.string().min(1),
+  ...categoryFields,
+})
+
+export const setCategoryActiveSchema = z.object({
+  categoryId: z.string().min(1),
+  active: z.boolean(),
+})
+
+export const moveCategorySchema = z.object({
+  categoryId: z.string().min(1),
+  direction: z.enum(['up', 'down']),
+})

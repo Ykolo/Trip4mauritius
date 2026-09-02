@@ -15,6 +15,7 @@ import {
   submitForModeration,
 } from '@/server/services/operator'
 import type { ActivityInput } from '@/lib/schemas/operator'
+import { testCategoryId } from '@/server/services/test-support'
 
 const TEST_PREFIX = 'vitest-admin-'
 
@@ -46,10 +47,12 @@ async function makeCandidate(label: string) {
   })
 }
 
-function activityInput(overrides: Partial<ActivityInput> = {}): ActivityInput {
+async function activityInput(
+  overrides: Partial<ActivityInput> = {},
+): Promise<ActivityInput> {
   return {
     title: `${TEST_PREFIX}offre ${Math.random().toString(36).slice(2, 8)}`,
-    category: 'Nature',
+    categoryId: await testCategoryId(),
     region: 'South',
     duration: '3 hours',
     description: { fr: 'Description de test.' },
@@ -73,7 +76,7 @@ async function operatorWithSubmission() {
   const profile = await requestOperatorAccess(user.id, 'Société de test')
   await approveOperator(profile.id)
 
-  const activity = await createActivity(profile.id, activityInput())
+  const activity = await createActivity(profile.id, await activityInput())
   await createSlots(profile.id, activity.id, [
     { date: tomorrow(), time: '09:00', maxSpots: 6 },
   ])
@@ -222,7 +225,7 @@ describe('modération des activités', () => {
     const user = await makeCandidate('draft')
     const profile = await requestOperatorAccess(user.id, 'Brouillonneur')
     await approveOperator(profile.id)
-    const draft = await createActivity(profile.id, activityInput())
+    const draft = await createActivity(profile.id, await activityInput())
 
     // Un brouillon appartient à son opérateur tant qu'il ne l'a pas soumis :
     // il ne doit apparaître dans aucune des files que l'admin peut ouvrir.

@@ -155,6 +155,17 @@ Les brouillons n'apparaissent dans aucune file : tant qu'un opérateur n'a pas s
 
 Un compte administrateur ne peut pas être révoqué depuis cet écran.
 
+### Gérer les catégories
+
+`/admin/categories` est le catalogue des catégories : ce que les touristes voient dans les filtres et sur l'accueil, et ce parmi quoi les opérateurs choisissent en publiant.
+
+- **Créer** — donnez un libellé (et un emoji, une image). L'adresse est dérivée du libellé et **ne changera plus jamais** ensuite : elle vit dans les liens de recherche que les touristes partagent et que Google a indexés.
+- **Renommer** — libre, à tout moment. Seul l'affichage change ; les liens existants continuent de fonctionner.
+- **Ordonner** — les flèches. C'est cet ordre qu'on retrouve sur l'accueil et dans les filtres.
+- **Masquer** — retire la catégorie des filtres et du formulaire opérateur. Les activités déjà classées dedans **restent en ligne** : les déréférencer parce que vous rangez votre liste serait une sanction sans rapport.
+
+Une catégorie ne se **supprime** pas. Les activités qui la référencent en dépendent, et la base refuse. C'est à ça que sert « masquer ».
+
 ### Activer et désactiver des fonctionnalités
 
 `/admin/features` permet d'éteindre ou de rallumer une fonctionnalité **sans redéployer le site**. Chaque interrupteur indique ce qu'il change concrètement, qui l'a basculé en dernier et quand.
