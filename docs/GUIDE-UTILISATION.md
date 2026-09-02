@@ -166,6 +166,24 @@ Les brouillons n'apparaissent dans aucune file : tant qu'un opérateur n'a pas s
 
 Un compte administrateur ne peut pas être révoqué depuis cet écran.
 
+### Activer et désactiver des fonctionnalités
+
+`/admin/features` permet d'éteindre ou de rallumer une fonctionnalité **sans redéployer le site**. Chaque interrupteur indique ce qu'il change concrètement, qui l'a basculé en dernier et quand.
+
+Trois fonctionnalités sont pilotables aujourd'hui :
+
+| Interrupteur | Ce qu'il change |
+|---|---|
+| **Inscription autonome des opérateurs** | Éteint, le formulaire « Devenir opérateur » disparaît et la demande est refusée côté serveur. Les profils opérateur ne peuvent plus être créés que par vous |
+| **Sélecteur de devise** | Éteint, le menu de devise du pied de page disparaît. ⚠️ Il ne convertit rien aujourd'hui : tous les montants restent en euros. Le laisser allumé promet un choix que le site n'honore pas |
+| **Contact WhatsApp** | Éteint, les points d'entrée WhatsApp disparaissent |
+
+Trois choses à savoir :
+
+- **La bascule met jusqu'à une minute** à se propager à toutes les instances du site. C'est le prix d'un cache qui évite une requête base à chaque affichage de page.
+- **« Rendre la main »** n'est pas la même chose qu'éteindre : ça efface votre décision et laisse reparler la configuration de l'environnement, puis la valeur par défaut du code.
+- **Éteindre une fonctionnalité la ferme réellement**, pas seulement à l'écran. Quelqu'un qui appellerait l'API directement se fait refuser aussi.
+
 ---
 
 ## Limites connues
@@ -193,4 +211,4 @@ Ce qui n'est pas encore en place. Ce sont des choix assumés à ce stade, pas de
 | `/checkout` | connecté | Tunnel de réservation |
 | `/bookings` · `/account` | connecté | Réservations et profil |
 | `/operator/*` | opérateur validé | Activités, créneaux, passagers, relevé |
-| `/admin/*` | admin | Modération, opérateurs |
+| `/admin/*` | admin | Modération, opérateurs, interrupteurs de fonctionnalité |

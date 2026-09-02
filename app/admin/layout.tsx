@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
-import { LayoutDashboard, ShieldCheck, Store } from 'lucide-react'
+import { LayoutDashboard, ShieldCheck, Store, ToggleLeft } from 'lucide-react'
 import { AdminGuard } from '@/components/layout/AdminGuard'
 import { useTRPC } from '@/lib/trpc/client'
 
@@ -11,6 +11,7 @@ const TABS = [
   { href: '/admin', label: "Vue d'ensemble", icon: LayoutDashboard },
   { href: '/admin/moderation', label: 'Modération', icon: ShieldCheck },
   { href: '/admin/operators', label: 'Opérateurs', icon: Store },
+  { href: '/admin/features', label: 'Fonctionnalités', icon: ToggleLeft },
 ]
 
 /** Pastille de file d'attente — un chiffre visible évite qu'une demande

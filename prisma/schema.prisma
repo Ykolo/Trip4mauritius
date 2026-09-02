@@ -282,3 +282,24 @@ model ProcessedStripeEvent {
 
   @@map("processed_stripe_events")
 }
+
+/// Bascule à chaud des interrupteurs de fonctionnalité.
+///
+/// Cette table ne contient QUE les clés explicitement basculées depuis
+/// /admin/features : l'absence de ligne signifie « laisser décider
+/// l'environnement, puis le défaut du code ». La liste des flags existants vit
+/// dans `lib/features.ts`, jamais ici — une clé en base qui n'y figure plus est
+/// ignorée à la lecture.
+model FeatureFlag {
+  key     String  @id
+  enabled Boolean
+
+  /// Email de l'admin qui a basculé, figé au moment du clic — pas une clé
+  /// étrangère. Même raison que `Booking.contactPhone` : le journal doit
+  /// survivre à la suppression du compte, et il enregistre qui a agi ce
+  /// jour-là, pas qui porte cet identifiant aujourd'hui.
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+
+  @@map("feature_flags")
+}

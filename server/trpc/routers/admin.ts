@@ -2,6 +2,8 @@ import {
   activityIdSchema,
   moderationQueueSchema,
   operatorIdSchema,
+  resetFeatureSchema,
+  setFeatureSchema,
 } from '@/lib/schemas/admin'
 import {
   approveOperator,
@@ -12,6 +14,11 @@ import {
   rejectActivity,
   revokeOperator,
 } from '@/server/services/admin'
+import {
+  listFeatureFlags,
+  resetFeatureFlag,
+  setFeatureFlag,
+} from '@/server/services/features'
 import { adminProcedure, createTRPCRouter } from '@/server/trpc/init'
 
 // Tout est en `adminProcedure`, sans exception.
@@ -44,4 +51,19 @@ export const adminRouter = createTRPCRouter({
   revokeOperator: adminProcedure
     .input(operatorIdSchema)
     .mutation(({ input }) => revokeOperator(input.operatorId)),
+
+  features: adminProcedure.query(() => listFeatureFlags()),
+
+  // `ctx.user.email` et jamais une valeur venue de la requête : un auteur que
+  // l'appelant choisit lui-même ne journalise rien.
+  setFeature: adminProcedure
+    .input(setFeatureSchema)
+    .mutation(({ ctx, input }) =>
+      setFeatureFlag(input.key, input.enabled, ctx.user.email),
+    ),
+
+  resetFeature: adminProcedure
+    .input(resetFeatureSchema)
+    .mutation(({ input }) => resetFeatureFlag(input.key)),
+
 })

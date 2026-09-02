@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { FEATURE_KEYS, type FeatureKey } from '@/lib/features'
 
 // Aucun schéma ne porte de `role` : la promotion est décidée par la procédure
 // appelée (`approveOperator`), jamais par une valeur venue de la requête. Un
@@ -21,3 +22,18 @@ export const activityIdSchema = z.object({
 export const operatorIdSchema = z.object({
   operatorId: z.string().min(1),
 })
+
+// La clé est validée contre le REGISTRE, pas contre `z.string()` : une clé
+// inventée est refusée à la frontière plutôt que d'écrire en base une ligne
+// que la résolution ignorera ensuite en silence.
+const featureKeySchema = z.enum(FEATURE_KEYS as [FeatureKey, ...FeatureKey[]])
+
+export const setFeatureSchema = z.object({
+  key: featureKeySchema,
+  enabled: z.boolean(),
+})
+
+export const resetFeatureSchema = z.object({
+  key: featureKeySchema,
+})
+

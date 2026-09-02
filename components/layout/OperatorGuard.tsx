@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Clock, Loader2, Lock, Store } from 'lucide-react'
+import { useFeature } from '@/components/providers/FeatureProvider'
 import { useTRPC } from '@/lib/trpc/client'
 
 // Cloisonnement RÉEL de /operator/*.
@@ -101,6 +102,7 @@ function RequestAccessForm() {
 
 export function OperatorGuard({ children }: { children: React.ReactNode }) {
   const trpc = useTRPC()
+  const selfSignup = useFeature('operator.selfSignup')
   const { data: profile, isLoading, error } = useQuery(
     trpc.operator.myProfile.queryOptions(),
   )
@@ -136,6 +138,31 @@ export function OperatorGuard({ children }: { children: React.ReactNode }) {
   }
 
   if (!profile) {
+    // Inscription autonome fermée : on l'annonce au lieu d'afficher un
+    // formulaire dont l'envoi serait refusé par `withFeature`.
+    if (!selfSignup) {
+      return (
+        <Centered>
+          <div className="w-16 h-16 bg-muted/20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Store className="w-8 h-8 text-muted" />
+          </div>
+          <h1 className="text-xl font-semibold text-ink mb-2">
+            Espace réservé aux opérateurs partenaires
+          </h1>
+          <p className="text-muted text-sm mb-6">
+            Les comptes opérateur sont ouverts par notre équipe. Contactez-nous
+            pour référencer vos activités sur Trip4mauritius.
+          </p>
+          <Link
+            href="/account"
+            className="inline-block w-full bg-surface text-ink font-semibold py-3 rounded-2xl"
+          >
+            Retour à mon compte
+          </Link>
+        </Centered>
+      )
+    }
+
     return (
       <Centered>
         <RequestAccessForm />

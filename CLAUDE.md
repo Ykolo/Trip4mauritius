@@ -42,6 +42,7 @@ types/               contrat de sortie : Activity, ActivityFull, Booking…
 - **Les images d'activité sont des URLs**, pas des fichiers : `data:` est explicitement refusé par le schéma. Un base64 dans `imageUrls` serait relu à chaque affichage du catalogue.
 - **La protection des routes vit dans `proxy.ts`** (`middleware.ts` est déprécié en Next 16 ; le proxy tourne sur le runtime Node). Elle ne lit qu'un cookie : c'est du confort d'UX, **l'autorisation reste dans les procédures tRPC**.
 - **Le service worker (`public/sw.js`) ne met en cache que des ressources publiques et immuables** — `/_next/static/*` et les médias. `/api/` n'est pas intercepté et aucune page HTML n'est stockée : ces réponses dépendent de la session, et les écrire sur le disque les rendrait lisibles hors ligne par l'utilisateur suivant d'un appareil partagé. Changer le cache impose de bumper `CACHE_NAME` (c'est `activate` qui purge les anciens).
+- **Un interrupteur de fonctionnalité n'est pas une autorisation.** Les flags sont déclarés dans `lib/features.ts` (source unique) et résolus en cascade *défaut ← variable d'environnement ← base*. Masquer un écran avec `useFeature` ne ferme rien : toute fonctionnalité qu'on prétend désactiver doit **aussi** passer par `withFeature()` dans sa procédure tRPC — même raisonnement que `proxy.ts`. Les flags voyagent du layout racine vers le client en props (`FeatureProvider`), jamais par une requête client : sinon l'écran scintille et chaque page paie un aller-retour.
 - **Après un changement de schéma, lancer `prisma generate`** : `next build` ne le fait pas.
 
 ## Commandes
@@ -77,8 +78,9 @@ Les tests d'intégration y visent un **Postgres jetable lancé dans le runner** 
 | 6 · Réservation | ✅ création, annulation, panier Zustand — 14 tests verts dont la concurrence |
 | 7 · Espace opérateur | ✅ CRUD, créneaux, cloisonnement vérifié par tests |
 | 8 · Admin | ✅ modération, validation des opérateurs, révocation |
+| 9 · Interrupteurs de fonctionnalité | ✅ registre, cascade, garde-fou tRPC, écran `/admin/features` |
 
-**37 tests verts** (`npm test`) : concurrence, RULE-001, annulation, cloisonnement opérateur, fuseau, modération.
+**50 tests verts** (`npm test`) : concurrence, RULE-001, annulation, cloisonnement opérateur, fuseau, modération, cascade des flags.
 
 ## Dettes assumées — acceptables avant lancement, pas au lancement
 
