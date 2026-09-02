@@ -8,7 +8,9 @@ import {
   ShieldCheck,
   Store,
   Tags,
+  Ticket,
   ToggleLeft,
+  Users,
 } from 'lucide-react'
 import { AdminGuard } from '@/components/layout/AdminGuard'
 import { useTRPC } from '@/lib/trpc/client'
@@ -16,7 +18,9 @@ import { useTRPC } from '@/lib/trpc/client'
 const TABS = [
   { href: '/admin', label: "Vue d'ensemble", icon: LayoutDashboard },
   { href: '/admin/moderation', label: 'Modération', icon: ShieldCheck },
+  { href: '/admin/bookings', label: 'Réservations', icon: Ticket },
   { href: '/admin/operators', label: 'Opérateurs', icon: Store },
+  { href: '/admin/users', label: 'Comptes', icon: Users },
   { href: '/admin/categories', label: 'Catégories', icon: Tags },
   { href: '/admin/features', label: 'Fonctionnalités', icon: ToggleLeft },
 ]

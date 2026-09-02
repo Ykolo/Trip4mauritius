@@ -81,8 +81,9 @@ Les tests d'intégration y visent un **Postgres jetable lancé dans le runner** 
 | 8 · Admin | ✅ modération, validation des opérateurs, révocation |
 | 9 · Interrupteurs de fonctionnalité | ✅ registre, cascade, garde-fou tRPC, écran `/admin/features` |
 | 10 · Catégories | ✅ table + CRUD admin `/admin/categories`, trois listes en dur supprimées |
+| 11 · Back-office | ✅ listing des réservations (deux contacts par ligne) et des comptes — **lecture seule** |
 
-**60 tests verts** (`npm test`) : concurrence, RULE-001, annulation, cloisonnement opérateur, fuseau, modération, cascade des flags, catégories.
+**68 tests verts** (`npm test`) : concurrence, RULE-001, annulation, cloisonnement opérateur, fuseau, modération, cascade des flags, catégories, cloisonnement des listings.
 
 ## Dettes assumées — acceptables avant lancement, pas au lancement
 

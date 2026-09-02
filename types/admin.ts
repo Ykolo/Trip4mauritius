@@ -1,4 +1,5 @@
 import type { ActivityStatus } from '@/types/activity'
+import type { BookingStatus } from '@/types/cart'
 import type { FeatureKey } from '@/lib/features'
 
 // Contrat de sortie de l'espace d'administration.
@@ -63,6 +64,67 @@ export interface FeatureFlagRow {
   updatedAt: string | null
   expiresOn: string
   expired: boolean
+}
+
+/**
+ * Une réservation vue par l'admin.
+ *
+ * Elle porte les DEUX contacts — celui du touriste et celui de l'opérateur —
+ * parce que c'est précisément ce que le back-office doit permettre : mettre
+ * les deux en relation à la main tant que rien ne le fait automatiquement.
+ * Sans ça, l'admin doit ouvrir la base pour trouver un numéro de téléphone.
+ */
+export interface AdminBookingRow {
+  id: string
+  bookingRef: string
+  status: BookingStatus
+  createdAt: string
+
+  /** Départ, épinglé sur Indian/Mauritius. */
+  date: string
+  time: string
+  /** Le départ a-t-il déjà eu lieu ? Dérivé ici, jamais recalculé côté écran. */
+  departed: boolean
+
+  activityTitle: string
+  activitySlug: string
+  participants: number
+  totalPrice: number
+  depositDue: number
+  balanceDueOnSite: number
+
+  touristName: string
+  touristEmail: string
+  /** Le numéro figé sur la réservation, pas celui du profil du client. */
+  contactPhone: string | null
+
+  operatorId: string
+  operatorName: string
+  operatorEmail: string
+}
+
+export interface AdminBookingsPage {
+  bookings: AdminBookingRow[]
+  total: number
+  pages: number
+}
+
+export interface AdminUserRow {
+  id: string
+  name: string
+  email: string
+  role: string
+  createdAt: string
+  bookingsCount: number
+  /** Nom commercial si le compte porte un profil opérateur, sinon null. */
+  operatorName: string | null
+  operatorVerified: boolean
+}
+
+export interface AdminUsersPage {
+  users: AdminUserRow[]
+  total: number
+  pages: number
 }
 
 export interface AdminOverview {

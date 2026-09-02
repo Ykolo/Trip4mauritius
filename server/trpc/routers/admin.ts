@@ -1,5 +1,7 @@
 import {
   activityIdSchema,
+  adminBookingsSchema,
+  adminUsersSchema,
   moderationQueueSchema,
   createCategorySchema,
   moveCategorySchema,
@@ -13,6 +15,8 @@ import {
   approveOperator,
   getOverview,
   listActivitiesForModeration,
+  listBookingsForAdmin,
+  listUsersForAdmin,
   listOperatorRequests,
   publishActivity,
   rejectActivity,
@@ -76,6 +80,16 @@ export const adminRouter = createTRPCRouter({
   resetFeature: adminProcedure
     .input(resetFeatureSchema)
     .mutation(({ input }) => resetFeatureFlag(input.key)),
+
+  // Lecture seule, et volontairement : rien ici ne change un rôle.
+  // `approveOperator` reste le seul chemin vers le rôle opérateur.
+  bookings: adminProcedure
+    .input(adminBookingsSchema)
+    .query(({ input }) => listBookingsForAdmin(input)),
+
+  users: adminProcedure
+    .input(adminUsersSchema)
+    .query(({ input }) => listUsersForAdmin(input)),
 
   categories: adminProcedure.query(() => listCategoriesForAdmin()),
 

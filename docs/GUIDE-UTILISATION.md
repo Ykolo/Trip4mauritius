@@ -146,6 +146,17 @@ Ce qui attend une décision — activités à modérer, demandes d'opérateur �
 
 Les brouillons n'apparaissent dans aucune file : tant qu'un opérateur n'a pas soumis, son travail lui appartient.
 
+### Suivre les réservations
+
+`/admin/bookings` liste **toutes** les réservations de la plateforme. Chaque ligne porte les coordonnées du **client** et de l'**opérateur**, cliquables : c'est ce qui permet de les mettre en relation à la main, sans ouvrir la base.
+
+- La recherche accepte indifféremment une **référence** (`MX-2026-000123`), un **nom** ou un **email**.
+- L'écran s'ouvre sur les départs **à venir**, les plus proches d'abord — les seuls sur lesquels il reste quelque chose à faire.
+
+### Consulter les comptes
+
+`/admin/users` : qui s'est inscrit, avec quel rôle, combien de réservations. **En lecture seule.** Les rôles se changent depuis *Opérateurs*, et aucun écran ne sait fabriquer un admin.
+
 ### Valider et révoquer les opérateurs
 
 `/admin/operators` sépare les **demandes en attente** des **opérateurs actifs**, avec l'identité réelle derrière chaque nom commercial — c'est sur elle que porte la décision.
@@ -210,4 +221,4 @@ Ce qui n'est pas encore en place. Ce sont des choix assumés à ce stade, pas de
 | `/checkout` | connecté | Tunnel de réservation |
 | `/bookings` · `/account` | connecté | Réservations et profil |
 | `/operator/*` | opérateur validé | Activités, créneaux, passagers, relevé |
-| `/admin/*` | admin | Modération, opérateurs, interrupteurs de fonctionnalité |
+| `/admin/*` | admin | Modération, réservations, opérateurs, comptes, catégories, interrupteurs |
