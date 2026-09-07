@@ -1,7 +1,10 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 
-import { listActiveCategories } from '@/server/services/category'
+import {
+  listActiveGuideCategories,
+  listPublishedGuides,
+} from '@/server/services/guide'
 
 // Composant SERVEUR : c'est une page éditoriale, son intérêt est d'être
 // indexable. Les régions et catégories renvoient vers le catalogue filtré,
@@ -63,10 +66,19 @@ const PRACTICAL = [
   ['Santé', "Aucun vaccin obligatoire. Prévoyez une protection solaire élevée : l'ensoleillement est fort toute l'année."],
 ]
 
-export default async function GuidePage() {
-  // Les catégories viennent de la base, jamais d'une liste en dur : le guide
-  // proposerait sinon des filtres qui ne renvoient rien.
-  const categories = await listActiveCategories()
+export default async function GuidePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ categorie?: string }>
+}) {
+  // Le filtre voyage par SLUG dans l'URL — c'est lui qui est partagé et
+  // indexé. Le libellé, lui, n'est qu'affiché.
+  const { categorie } = await searchParams
+
+  const [categories, guides] = await Promise.all([
+    listActiveGuideCategories(),
+    listPublishedGuides(categorie),
+  ])
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 space-y-12">
@@ -115,18 +127,78 @@ export default async function GuidePage() {
       </section>
 
       <section>
-        <h2 className="text-2xl font-semibold text-ink mb-4">Par envie</h2>
-        <div className="flex flex-wrap gap-2">
-          {categories.map((c) => (
+        <h2 className="text-2xl font-semibold text-ink mb-4">Nos articles</h2>
+
+        {categories.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-5">
             <Link
-              key={c.slug}
-              href={`/activities?category=${c.slug}`}
-              className="px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium hover:bg-primary/20 transition-colors"
+              href="/guide"
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                categorie
+                  ? 'bg-primary/10 text-primary hover:bg-primary/20'
+                  : 'bg-primary text-white'
+              }`}
             >
-              {c.label}
+              Tout
             </Link>
-          ))}
-        </div>
+            {categories.map((c) => (
+              <Link
+                key={c.slug}
+                href={`/guide?categorie=${c.slug}`}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                  categorie === c.slug
+                    ? 'bg-primary text-white'
+                    : 'bg-primary/10 text-primary hover:bg-primary/20'
+                }`}
+              >
+                {c.label}
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {guides.length === 0 ? (
+          <p className="text-muted text-sm">
+            {categorie
+              ? 'Aucun article dans cette catégorie pour le moment.'
+              : 'Aucun article publié pour le moment.'}
+          </p>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {guides.map((guide) => (
+              <Link
+                key={guide.slug}
+                href={`/guide/${guide.slug}`}
+                className="rounded-2xl bg-white shadow-card overflow-hidden group"
+              >
+                {guide.imageUrl && (
+                  <div className="relative aspect-[16/9] overflow-hidden">
+                    {/* `img` et non `next/image` : l'URL est saisie par l'admin,
+                        donc de domaine imprévisible, et `images.unoptimized`
+                        est déjà posé pour le reste du site. */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={guide.imageUrl}
+                      alt=""
+                      className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                    />
+                  </div>
+                )}
+                <div className="p-5">
+                  <span className="text-xs font-medium text-primary uppercase tracking-wide">
+                    {guide.category}
+                  </span>
+                  <h3 className="font-semibold text-ink mt-1 mb-2">
+                    {guide.title}
+                  </h3>
+                  <p className="text-sm text-muted leading-relaxed line-clamp-3">
+                    {guide.excerpt}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </section>
 
       <section>

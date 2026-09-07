@@ -18,6 +18,15 @@ import {
   deleteSlotSchema,
 } from '@/lib/schemas/operator'
 import {
+  createGuideCategorySchema,
+  createGuideSchema,
+  guideCategoryIdSchema,
+  guideIdSchema,
+  renameGuideCategorySchema,
+  setGuideCategoryActiveSchema,
+  updateGuideSchema,
+} from '@/lib/schemas/guide'
+import {
   createActivityForAdmin,
   createSlotsForAdmin,
   deleteSlotForAdmin,
@@ -40,6 +49,17 @@ import {
   setCategoryActive,
   updateCategory,
 } from '@/server/services/category'
+import {
+  createGuide,
+  createGuideCategory,
+  deleteGuide,
+  getGuideForAdmin,
+  listGuideCategoriesForAdmin,
+  listGuidesForAdmin,
+  renameGuideCategory,
+  setGuideCategoryActive,
+  updateGuide,
+} from '@/server/services/guide'
 import {
   listFeatureFlags,
   resetFeatureFlag,
@@ -136,6 +156,42 @@ export const adminRouter = createTRPCRouter({
   deleteSlot: adminProcedure
     .input(deleteSlotSchema)
     .mutation(({ input }) => deleteSlotForAdmin(input.slotId)),
+
+  // Guides éditoriaux. Écriture réservée à l'admin : il n'y a pas de
+  // contribution extérieure, donc pas de cloisonnement par auteur à prévoir.
+  guides: adminProcedure.query(() => listGuidesForAdmin()),
+
+  guide: adminProcedure
+    .input(guideIdSchema)
+    .query(({ input }) => getGuideForAdmin(input.guideId)),
+
+  createGuide: adminProcedure
+    .input(createGuideSchema)
+    .mutation(({ input }) => createGuide(input)),
+
+  updateGuide: adminProcedure
+    .input(updateGuideSchema)
+    .mutation(({ input }) => updateGuide(input.guideId, input.data)),
+
+  deleteGuide: adminProcedure
+    .input(guideIdSchema)
+    .mutation(({ input }) => deleteGuide(input.guideId)),
+
+  guideCategories: adminProcedure.query(() => listGuideCategoriesForAdmin()),
+
+  createGuideCategory: adminProcedure
+    .input(createGuideCategorySchema)
+    .mutation(({ input }) => createGuideCategory(input.label)),
+
+  renameGuideCategory: adminProcedure
+    .input(renameGuideCategorySchema)
+    .mutation(({ input }) => renameGuideCategory(input.categoryId, input.label)),
+
+  setGuideCategoryActive: adminProcedure
+    .input(setGuideCategoryActiveSchema)
+    .mutation(({ input }) =>
+      setGuideCategoryActive(input.categoryId, input.active),
+    ),
 
   categories: adminProcedure.query(() => listCategoriesForAdmin()),
 

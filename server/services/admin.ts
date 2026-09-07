@@ -30,19 +30,26 @@ import type {
 // main, pour aucun gain fonctionnel.
 
 export async function getOverview(): Promise<AdminOverview> {
-  const [publishedActivities, pendingBookings, confirmedBookings, totalOperators] =
-    await Promise.all([
-      db.activity.count({ where: { status: 'published' } }),
-      db.booking.count({ where: { status: 'pending_payment' } }),
-      db.booking.count({ where: { status: 'confirmed' } }),
-      db.operator.count(),
-    ])
+  const [
+    publishedActivities,
+    pendingBookings,
+    confirmedBookings,
+    totalOperators,
+    publishedGuides,
+  ] = await Promise.all([
+    db.activity.count({ where: { status: 'published' } }),
+    db.booking.count({ where: { status: 'pending_payment' } }),
+    db.booking.count({ where: { status: 'confirmed' } }),
+    db.operator.count(),
+    db.guide.count({ where: { status: 'published' } }),
+  ])
 
   return {
     publishedActivities,
     pendingBookings,
     confirmedBookings,
     totalOperators,
+    publishedGuides,
   }
 }
 

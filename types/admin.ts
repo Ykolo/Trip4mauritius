@@ -131,4 +131,5 @@ export interface AdminOverview {
   pendingBookings: number
   confirmedBookings: number
   totalOperators: number
+  publishedGuides: number
 }

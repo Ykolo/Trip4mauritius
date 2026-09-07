@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
-import { CheckCircle2, Store, Ticket } from 'lucide-react'
+import { BookOpen, CheckCircle2, Store, Ticket } from 'lucide-react'
 import { useTRPC } from '@/lib/trpc/client'
 
 // Vue d'ensemble — un état, pas une file d'attente.
@@ -56,8 +56,8 @@ export default function AdminOverviewPage() {
       </header>
 
       {isLoading || !data ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[0, 1, 2].map((i) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[0, 1, 2, 3].map((i) => (
             <div
               key={i}
               className="h-32 bg-white rounded-2xl shadow-card animate-pulse"
@@ -65,7 +65,7 @@ export default function AdminOverviewPage() {
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Tile
             label="Activités en ligne"
             value={data.publishedActivities}
@@ -84,6 +84,13 @@ export default function AdminOverviewPage() {
             value={data.totalOperators}
             icon={Store}
             href="/admin/operators"
+          />
+          <Tile
+            label="Guides"
+            value={data.publishedGuides}
+            hint="articles en ligne"
+            icon={BookOpen}
+            href="/admin/guides"
           />
         </div>
       )}
