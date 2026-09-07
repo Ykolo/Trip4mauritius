@@ -2,6 +2,7 @@ import { activityRouter } from '@/server/trpc/routers/activity'
 import { bookingRouter } from '@/server/trpc/routers/booking'
 import { operatorRouter } from '@/server/trpc/routers/operator'
 import { adminRouter } from '@/server/trpc/routers/admin'
+import { guideRouter } from '@/server/trpc/routers/guide'
 import { createCallerFactory, createTRPCRouter } from '@/server/trpc/init'
 
 export const appRouter = createTRPCRouter({
@@ -9,6 +10,7 @@ export const appRouter = createTRPCRouter({
   booking: bookingRouter,
   operator: operatorRouter,
   admin: adminRouter,
+  guide: guideRouter,
 })
 
 export type AppRouter = typeof appRouter

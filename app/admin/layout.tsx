@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
+  BookOpen,
   LayoutDashboard,
   MapPin,
   Store,
@@ -29,6 +30,7 @@ const TABS = [
   { href: '/admin/activities', label: 'Catalogue', icon: MapPin },
   { href: '/admin/bookings', label: 'Résas', icon: Ticket },
   { href: '/admin/operators', label: 'Opérateurs', icon: Store },
+  { href: '/admin/guides', label: 'Guides', icon: BookOpen },
   { href: '/admin/categories', label: 'Catégories', icon: Tags },
 ]
 

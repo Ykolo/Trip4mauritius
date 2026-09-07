@@ -200,6 +200,74 @@ model Category {
   @@map("categories")
 }
 
+/// Classification des guides — SÉPARÉE de celle des activités, volontairement.
+///
+/// « Stationnement » ou « Sécurité » n'ont rien à faire dans les filtres du
+/// catalogue, et renommer « Nature » côté activités ne doit pas toucher aux
+/// articles. Deux usages, deux listes, deux écrans d'administration.
+model GuideCategory {
+  id    String @id @default(cuid())
+  slug  String @unique
+  label String @unique
+
+  /// Même raison que pour les catégories d'activités : l'ordre alphabétique ne
+  /// dit rien de l'importance éditoriale.
+  position Int @default(0)
+
+  /// On désactive, on ne supprime pas : la clé étrangère des guides le
+  /// refuserait, et les articles déjà classés doivent survivre.
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  guides Guide[]
+
+  @@index([active, position])
+  @@map("guide_categories")
+}
+
+/// Article éditorial : un texte long et des images.
+model Guide {
+  id         String @id @default(cuid())
+  categoryId String
+
+  /// Vit dans l'URL publique et dans les liens partagés : jamais modifié après
+  /// création, comme le slug d'une activité.
+  slug  String @unique
+  title String
+
+  /// Chapô affiché dans les listes. Séparé du corps : en extraire les premières
+  /// lignes produirait une accroche coupée au milieu d'une phrase.
+  excerpt String
+
+  /// Le corps de l'article, en Markdown.
+  content String
+
+  /// Des URLs, jamais de fichiers — le projet n'a aucun envoi. La première sert
+  /// d'image de couverture.
+  imageUrls String[]
+
+  status GuideStatus @default(draft)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  category GuideCategory @relation(fields: [categoryId], references: [id])
+
+  /// L'index qui sert la page publique : les publiés d'une catégorie, du plus
+  /// récent au plus ancien.
+  @@index([status, categoryId, updatedAt])
+  @@map("guides")
+}
+
+/// Deux états seulement. Il n'y a pas de modération au lot 1 : un guide est en
+/// brouillon ou en ligne, et c'est Trip4mauritius qui décide.
+enum GuideStatus {
+  draft
+  published
+}
+
 model Activity {
   id         String @id @default(cuid())
   operatorId String
