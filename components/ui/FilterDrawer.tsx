@@ -3,6 +3,7 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
 import { useTRPC } from '@/lib/trpc/client'
+import { Slider } from '@/components/ui/slider'
 import type { ActivityFilters } from '@/types/activity'
 
 const REGIONS = ['Nord', 'Sud', 'Est', 'Ouest', 'Centre']
@@ -212,32 +213,45 @@ function RadioChip({ label, checked, onChange }: { label: string; checked: boole
   )
 }
 
-// Price range slider
+const PRICE_MIN = 0
+const PRICE_MAX = 500
+
+/**
+ * Fourchette de prix, à deux poignées sur une seule piste.
+ *
+ * L'implémentation précédente posait deux `input[type=range]` natifs côte à
+ * côte, chacun en `flex-1`. Deux défauts, et le débordement n'était pas le
+ * pire :
+ *
+ * 1. Un élément flex a `min-width: auto` par défaut, donc il ne descend jamais
+ *    sous la largeur intrinsèque de son contenu. Un `input[type=range]` en a
+ *    une (~130 px selon le navigateur) : à deux, plus l'espacement, ça dépassait
+ *    le tiroir sur les écrans étroits. C'est le symptôme visible.
+ * 2. Les deux curseurs étaient indépendants : rien n'empêchait de pousser le
+ *    minimum au-delà du maximum, ce qui produisait une requête ne renvoyant
+ *    jamais rien.
+ *
+ * Le composant Radix déjà présent règle les deux : une piste unique, donc plus
+ * de largeur intrinsèque à contenir, et `minStepsBetweenThumbs` qui garde les
+ * poignées ordonnées.
+ */
 function PriceRangeSlider({ min, max, onChange }: { min: number; max: number; onChange: (min: number, max: number) => void }) {
   return (
     <div className="space-y-4">
       <div className="flex justify-between text-sm text-muted">
-        <span>€{min}</span>
-        <span>€{max}</span>
+        <span>{min} €</span>
+        <span>{max} €{max >= PRICE_MAX ? '+' : ''}</span>
       </div>
-      <div className="flex gap-4">
-        <input
-          type="range"
-          min={0}
-          max={500}
-          value={min}
-          onChange={(e) => onChange(Number(e.target.value), max)}
-          className="flex-1 accent-primary"
-        />
-        <input
-          type="range"
-          min={0}
-          max={500}
-          value={max}
-          onChange={(e) => onChange(min, Number(e.target.value))}
-          className="flex-1 accent-primary"
-        />
-      </div>
+      <Slider
+        value={[min, max]}
+        min={PRICE_MIN}
+        max={PRICE_MAX}
+        step={5}
+        minStepsBetweenThumbs={1}
+        onValueChange={([nextMin, nextMax]) => onChange(nextMin, nextMax)}
+        aria-label="Fourchette de prix"
+        className="w-full"
+      />
     </div>
   )
 }

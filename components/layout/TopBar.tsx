@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Search, ShoppingCart, X } from "lucide-react";
+import { Search, ShoppingCart, User, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useCartHydrated, useCartStore } from "@/lib/stores/cart";
@@ -21,9 +21,13 @@ export function TopBar() {
   return (
     <header className="fixed top-0 left-0 right-0 z-50 h-14 bg-white border-b border-muted/10">
       <div className="flex items-center justify-between h-full px-4 md:px-6 max-w-7xl mx-auto">
-        <div className={`flex-shrink-0 h-full py-1 ${isSearchOpen ? "hidden md:block" : ""}`}>
+        <Link
+          href="/"
+          aria-label="Trip4mauritius — retour à l'accueil"
+          className={`flex-shrink-0 h-full py-1 active:scale-95 transition-transform ${isSearchOpen ? "hidden md:block" : ""}`}
+        >
           <Image src="/images/logo.jpg" alt="Trip4mauritius" width={180} height={48} className="h-full w-auto object-contain" />
-        </div>
+        </Link>
 
         {/* Center: Search */}
         <div
@@ -70,6 +74,16 @@ export function TopBar() {
                 {cartCount > 99 ? "99+" : cartCount}
               </span>
             )}
+          </Link>
+
+          {/* Le compte a quitté la barre du bas pour laisser sa place au
+              contact WhatsApp. Il reste atteignable de partout depuis ici. */}
+          <Link
+            href="/account"
+            className="min-w-[48px] min-h-[48px] flex items-center justify-center active:scale-95 transition-transform"
+            aria-label="Mon compte"
+          >
+            <User className="w-5 h-5 text-primary" />
           </Link>
         </div>
       </div>
