@@ -1,10 +1,8 @@
 'use client'
 
-import { useState } from 'react'
 import Link from 'next/link'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { Clock, Loader2, Lock, Store } from 'lucide-react'
-import { useFeature } from '@/components/providers/FeatureProvider'
 import { useTRPC } from '@/lib/trpc/client'
 
 // Cloisonnement RÉEL de /operator/*.
@@ -28,81 +26,8 @@ function Centered({ children }: { children: React.ReactNode }) {
   )
 }
 
-function RequestAccessForm() {
-  const trpc = useTRPC()
-  const queryClient = useQueryClient()
-  const [displayName, setDisplayName] = useState('')
-
-  const request = useMutation(
-    trpc.operator.requestAccess.mutationOptions({
-      onSuccess: () =>
-        queryClient.invalidateQueries({
-          queryKey: trpc.operator.myProfile.queryKey(),
-        }),
-    }),
-  )
-
-  return (
-    <>
-      <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-        <Store className="w-8 h-8 text-primary" />
-      </div>
-      <h1 className="text-xl font-semibold text-ink mb-2">
-        Devenir opérateur
-      </h1>
-      <p className="text-muted text-sm mb-6">
-        Publiez vos activités sur Trip4mauritius. Un administrateur validera
-        votre demande avant la mise en ligne.
-      </p>
-
-      <form
-        onSubmit={(e) => {
-          e.preventDefault()
-          request.mutate({ displayName: displayName.trim() })
-        }}
-        className="space-y-4 text-left"
-      >
-        <div>
-          <label
-            htmlFor="displayName"
-            className="block text-sm font-medium text-ink mb-1.5"
-          >
-            Nom commercial
-          </label>
-          <input
-            id="displayName"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            required
-            minLength={2}
-            placeholder="Blue Safari Mauritius"
-            className="w-full px-4 py-3 rounded-2xl border border-surface focus:border-primary focus:outline-none transition-colors"
-          />
-          <p className="text-xs text-muted mt-1.5">
-            C&apos;est le nom que verront les touristes sur vos fiches.
-          </p>
-        </div>
-
-        {request.error && (
-          <p className="text-red-500 text-sm">{request.error.message}</p>
-        )}
-
-        <button
-          type="submit"
-          disabled={request.isPending}
-          className="w-full bg-primary text-white font-semibold py-3 rounded-2xl active:scale-95 transition-transform disabled:opacity-50 flex items-center justify-center gap-2"
-        >
-          {request.isPending && <Loader2 className="w-5 h-5 animate-spin" />}
-          Envoyer ma demande
-        </button>
-      </form>
-    </>
-  )
-}
-
 export function OperatorGuard({ children }: { children: React.ReactNode }) {
   const trpc = useTRPC()
-  const selfSignup = useFeature('operator.selfSignup')
   const { data: profile, isLoading, error } = useQuery(
     trpc.operator.myProfile.queryOptions(),
   )
@@ -137,59 +62,53 @@ export function OperatorGuard({ children }: { children: React.ReactNode }) {
     )
   }
 
+  // Plus d'auto-inscription depuis le lot 1 : seul un administrateur
+  // Trip4mauritius crée un opérateur, depuis /admin/operators. On l'annonce au
+  // lieu d'afficher un formulaire dont l'envoi n'aboutirait nulle part.
   if (!profile) {
-    // Inscription autonome fermée : on l'annonce au lieu d'afficher un
-    // formulaire dont l'envoi serait refusé par `withFeature`.
-    if (!selfSignup) {
-      return (
-        <Centered>
-          <div className="w-16 h-16 bg-muted/20 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Store className="w-8 h-8 text-muted" />
-          </div>
-          <h1 className="text-xl font-semibold text-ink mb-2">
-            Espace réservé aux opérateurs partenaires
-          </h1>
-          <p className="text-muted text-sm mb-6">
-            Les comptes opérateur sont ouverts par notre équipe. Contactez-nous
-            pour référencer vos activités sur Trip4mauritius.
-          </p>
-          <Link
-            href="/account"
-            className="inline-block w-full bg-surface text-ink font-semibold py-3 rounded-2xl"
-          >
-            Retour à mon compte
-          </Link>
-        </Centered>
-      )
-    }
-
     return (
       <Centered>
-        <RequestAccessForm />
+        <div className="w-16 h-16 bg-muted/20 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Store className="w-8 h-8 text-muted" />
+        </div>
+        <h1 className="text-xl font-semibold text-ink mb-2">
+          Espace réservé aux opérateurs partenaires
+        </h1>
+        <p className="text-muted text-sm mb-6">
+          Les comptes opérateur sont ouverts par notre équipe. Contactez-nous
+          pour référencer vos activités sur Trip4mauritius.
+        </p>
+        <Link
+          href="/account"
+          className="inline-block w-full bg-surface text-ink font-semibold py-3 rounded-2xl"
+        >
+          Retour à mon compte
+        </Link>
       </Centered>
     )
   }
 
-  // Profil créé mais rôle pas encore basculé : la demande attend un admin.
-  // La promotion ne prend effet qu'au rafraîchissement du cache de session,
-  // d'où la mention explicite — sans elle, l'opérateur validé croirait que
-  // rien n'a bougé.
-  if (profile.role !== 'operator' && profile.role !== 'admin') {
+  // Un profil existe mais le rôle n'a pas suivi : anomalie, pas une file
+  // d'attente. `createOperator` écrit les deux dans la même transaction, donc
+  // ce cas ne devrait plus se produire — il reste affiché pour ne pas laisser
+  // un écran blanc si une donnée ancienne traîne.
+  if (profile.role !== 'operator' && profile.role !== 'admin' && profile.role !== 'superadmin') {
     return (
       <Centered>
         <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
           <Clock className="w-8 h-8 text-amber-600" />
         </div>
         <h1 className="text-xl font-semibold text-ink mb-2">
-          Demande en cours d&apos;examen
+          Compte incomplet
         </h1>
         <p className="text-muted text-sm mb-2">
-          Votre demande pour <strong>{profile.displayName}</strong> a bien été
-          enregistrée. Un administrateur doit la valider.
+          Le profil <strong>{profile.displayName}</strong> existe mais votre
+          compte n&apos;a pas le rôle opérateur. Signalez-le à l&apos;équipe
+          Trip4mauritius.
         </p>
         <p className="text-muted text-xs">
-          Une fois validée, reconnectez-vous pour que votre nouveau rôle prenne
-          effet.
+          Si le rôle vient d&apos;être posé, reconnectez-vous pour qu&apos;il
+          prenne effet.
         </p>
         <Link
           href="/account"

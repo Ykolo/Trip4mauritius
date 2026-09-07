@@ -2,26 +2,15 @@ import { z } from 'zod'
 import { FEATURE_KEYS, type FeatureKey } from '@/lib/features'
 import { activityInputSchema } from '@/lib/schemas/operator'
 
-// Aucun schéma ne porte de `role` : la promotion est décidée par la procédure
-// appelée (`approveOperator`), jamais par une valeur venue de la requête. Un
-// champ `role` libre ici suffirait à transformer la modération en fabrique
-// d'administrateurs.
+// Aucun schéma ne porte de `role` : le rôle est décidé par la procédure
+// appelée (`createOperator`), jamais par une valeur venue de la requête. Un
+// champ `role` libre ici suffirait à transformer la création d'opérateur en
+// fabrique d'administrateurs.
 
-export const moderationQueueSchema = z.object({
-  // Seuls les états qu'un admin a une raison de parcourir. `draft` en est
-  // absent volontairement : un brouillon appartient à son opérateur tant qu'il
-  // ne l'a pas soumis.
-  status: z
-    .enum(['pending_moderation', 'published', 'rejected', 'archived'])
-    .default('pending_moderation'),
-})
-
-export const activityIdSchema = z.object({
-  activityId: z.string().min(1),
-})
-
-export const operatorIdSchema = z.object({
-  operatorId: z.string().min(1),
+export const createOperatorSchema = z.object({
+  email: z.string().email(),
+  name: z.string().min(1).max(120),
+  displayName: z.string().min(1).max(120),
 })
 
 // La clé est validée contre le REGISTRE, pas contre `z.string()` : une clé
@@ -63,14 +52,8 @@ export const adminBookingsSchema = z.object({
   period: z.enum(['all', 'upcoming', 'past']).default('upcoming'),
 })
 
-export const adminUsersSchema = z.object({
-  page,
-  search,
-  role: z.enum(['all', 'tourist', 'operator', 'admin']).default('all'),
-})
-
 export type AdminBookingsInput = z.infer<typeof adminBookingsSchema>
-export type AdminUsersInput = z.infer<typeof adminUsersSchema>
+export type CreateOperatorInput = z.infer<typeof createOperatorSchema>
 
 // Catalogue.
 //

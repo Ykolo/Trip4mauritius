@@ -243,28 +243,40 @@ export async function updateActivity(
   activityId: string,
   input: ActivityInput,
 ): Promise<OperatorActivityDetail> {
-  const existing = await ownedActivity(operatorId, activityId)
+  await ownedActivity(operatorId, activityId)
 
-  // Modifier une activité publiée la renvoie en modération : sinon un opérateur
-  // ferait valider un texte anodin puis le remplacerait une fois en ligne.
-  const status =
-    existing.status === 'published' || existing.status === 'rejected'
-      ? 'pending_moderation'
-      : existing.status
-
+  // Le statut ne bouge PAS.
+  //
+  // Une modification renvoyait la fiche en `pending_moderation` — la garantie
+  // qu'un opérateur ne fasse pas valider un texte anodin pour le remplacer
+  // ensuite. Cette file n'existe plus au lot 1 : conserver la règle ferait
+  // disparaître du catalogue toute fiche corrigée, sans que rien ne l'y
+  // ramène. C'est exactement le même raisonnement que pour l'édition depuis
+  // `/admin/activities`, qui ne remet pas non plus en modération.
+  //
+  // Le contrôle a posteriori le remplace : Trip4mauritius voit tout le
+  // catalogue et peut dépublier depuis le back-office.
   await db.activity.update({
     where: { id: activityId },
-    data: {
-      ...toActivityWriteData(input),
-      status,
-    },
+    data: toActivityWriteData(input),
   })
 
   return getOperatorActivity(operatorId, activityId)
 }
 
-/** Soumet un brouillon à la modération. */
-export async function submitForModeration(
+/**
+ * Met un brouillon en ligne.
+ *
+ * S'appelait `submitForModeration` et posait `pending_moderation` : il n'y a
+ * plus de file d'attente au lot 1, la fiche part donc directement en
+ * `published`. Trip4mauritius corrige après coup depuis `/admin/activities`,
+ * qui édite la fiche de n'importe quel opérateur.
+ *
+ * Le contrôle des créneaux, lui, reste — c'était la vraie raison d'être de
+ * cette fonction. Une fiche publiée sans départ à venir est indexée par les
+ * moteurs et réservable par personne.
+ */
+export async function publishOwnActivity(
   operatorId: string,
   activityId: string,
 ): Promise<OperatorActivityDetail> {
@@ -273,12 +285,10 @@ export async function submitForModeration(
   if (existing.status !== 'draft' && existing.status !== 'rejected') {
     throw new TRPCError({
       code: 'BAD_REQUEST',
-      message: 'Seuls un brouillon ou une activité refusée peuvent être soumis.',
+      message: 'Seul un brouillon peut être mis en ligne.',
     })
   }
 
-  // Publier une activité sans créneau produirait une fiche que personne ne peut
-  // réserver — autant l'arrêter avant la file de modération.
   const slots = await db.activitySlot.count({
     where: { activityId, startsAt: { gte: new Date() } },
   })
@@ -286,13 +296,13 @@ export async function submitForModeration(
   if (slots === 0) {
     throw new TRPCError({
       code: 'BAD_REQUEST',
-      message: 'Ajoutez au moins un créneau à venir avant de soumettre.',
+      message: 'Ajoutez au moins un créneau à venir avant de mettre en ligne.',
     })
   }
 
   await db.activity.update({
     where: { id: activityId },
-    data: { status: 'pending_moderation' },
+    data: { status: 'published' },
   })
 
   return getOperatorActivity(operatorId, activityId)
@@ -392,38 +402,7 @@ export async function updateOperatorProfile(
   return toOperatorProfile(operator)
 }
 
-// ---------------------------------------------------------------------------
-// Devenir opérateur
-// ---------------------------------------------------------------------------
-
-/**
- * Demande d'accès opérateur.
- *
- * Crée le profil `Operator` en `verified: false` SANS toucher au rôle : la
- * bascule en `operator` est le geste d'un admin (lot 8). Laisser cette
- * procédure promouvoir son appelant en ferait un endpoint d'auto-promotion.
- */
-export async function requestOperatorAccess(
-  userId: string,
-  displayName: string,
-): Promise<OperatorProfile> {
-  const existing = await db.operator.findUnique({ where: { userId } })
-
-  if (existing) {
-    throw new TRPCError({
-      code: 'CONFLICT',
-      message: 'Une demande est déjà enregistrée pour ce compte.',
-    })
-  }
-
-  const operator = await db.operator.create({
-    data: { userId, displayName, verified: false },
-  })
-
-  return toOperatorProfile(operator)
-}
-
-/** Profil opérateur du compte, ou `null` s'il n'a jamais fait de demande. */
+/** Profil opérateur du compte, ou `null` si l'admin ne l'a pas créé. */
 export async function getMyOperatorProfile(
   userId: string,
 ): Promise<(OperatorProfile & { role: string }) | null> {

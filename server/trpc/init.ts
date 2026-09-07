@@ -105,8 +105,32 @@ export const operatorProcedure = protectedProcedure.use(async ({ ctx, next }) =>
   return next({ ctx: { ...ctx, operator } })
 })
 
+/**
+ * Espace d'administration Trip4mauritius.
+ *
+ * `superadmin` passe aussi : Kled doit pouvoir tout faire de ce que fait le
+ * client, sinon le prestataire devrait jongler entre deux comptes pour
+ * diagnostiquer un problème. L'inverse n'est pas vrai — voir ci-dessous.
+ */
 export const adminProcedure = protectedProcedure.use(async ({ ctx, next }) => {
-  if (ctx.user.role !== 'admin') {
+  if (ctx.user.role !== 'admin' && ctx.user.role !== 'superadmin') {
+    throw new TRPCError({ code: 'FORBIDDEN' })
+  }
+  return next({ ctx })
+})
+
+/**
+ * Réglages du prestataire, hors de portée du client.
+ *
+ * Les interrupteurs de fonctionnalité décident de ce que Trip4mauritius voit :
+ * les laisser à l'administrateur client reviendrait à lui donner la main sur
+ * son propre périmètre. Seul Kled les manœuvre.
+ *
+ * Un `admin` est donc refusé ici — c'est délibéré, et c'est la seule asymétrie
+ * entre les deux rôles.
+ */
+export const superAdminProcedure = protectedProcedure.use(async ({ ctx, next }) => {
+  if (ctx.user.role !== 'superadmin') {
     throw new TRPCError({ code: 'FORBIDDEN' })
   }
   return next({ ctx })

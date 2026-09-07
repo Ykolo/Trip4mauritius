@@ -172,6 +172,8 @@ const CREDENTIAL_ISSUER = 'local:credential'
 // littéraux séparés finiraient par diverger d'une lettre.
 const ADMIN_EMAIL = 'admin@mauriexplore.mu'
 const TOURIST_EMAIL = 'tourist@example.com'
+/** Kled, le prestataire. Seul rôle habilité à manœuvrer les interrupteurs. */
+const SUPERADMIN_EMAIL = 'kled@kledpro.tech'
 
 /** Doit rester aligné sur `minPasswordLength` dans lib/auth.ts. */
 const MIN_PASSWORD_LENGTH = 12
@@ -252,6 +254,22 @@ async function main() {
   })
   await setPassword(admin.id, seedPassword)
   console.log(`  admin: ${admin.email}`)
+
+  // Super admin Kled. Créé ici et NULLE PART ailleurs, exactement comme
+  // l'admin : aucun endpoint ne fabrique de rôle au-dessus d'`operator`.
+  const superadmin = await db.user.upsert({
+    where: { email: SUPERADMIN_EMAIL },
+    update: { role: UserRole.superadmin },
+    create: {
+      email: SUPERADMIN_EMAIL,
+      name: 'Kled',
+      emailVerified: true,
+      role: UserRole.superadmin,
+      locale: 'fr',
+    },
+  })
+  await setPassword(superadmin.id, seedPassword)
+  console.log(`  super admin: ${superadmin.email}`)
 
   // Un touriste de test, pour pouvoir exercer le tunnel de réservation.
   const tourist = await db.user.upsert({
@@ -361,6 +379,7 @@ async function main() {
   // constantes que les écritures ci-dessus : il ne peut donc pas annoncer un
   // identifiant que le seed n'a pas réellement écrit.
   const accounts: Array<[role: string, email: string]> = [
+    ['super admin (Kled)', SUPERADMIN_EMAIL],
     ['admin', ADMIN_EMAIL],
     ...OPERATORS.map((o) => [o.verified ? 'opérateur' : 'opérateur (non vérifié)', o.email] as [string, string]),
     ['touriste', TOURIST_EMAIL],

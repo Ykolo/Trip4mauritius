@@ -117,6 +117,11 @@ enum UserRole {
   tourist
   operator
   admin
+
+  // Kled, le prestataire. Au-dessus de `admin` : il commande les interrupteurs
+  // de fonctionnalité, qui décident de ce que le client voit. Créé par le seed
+  // uniquement, comme `admin` — aucun endpoint ne fabrique l'un ou l'autre.
+  superadmin
 }
 
 enum ActivityStatus {

@@ -14,11 +14,16 @@ import {
   resetFeatureFlag,
   setFeatureFlag,
 } from '@/server/services/features'
-import { createCaller } from '@/server/trpc/root'
+import {
+  createCallerFactory,
+  createTRPCRouter,
+  protectedProcedure,
+  withFeature,
+} from '@/server/trpc/init'
 
 // Le flag testé est un vrai flag du registre : un flag inventé pour les tests
 // ne prouverait que le fonctionnement du flag inventé.
-const KEY = 'operator.selfSignup' as const
+const KEY = 'whatsapp.contact' as const
 const ENV_VAR = featureEnvVar(KEY)
 
 async function clean() {
@@ -48,14 +53,16 @@ describe('registre', () => {
   it('nomme les variables d\'environnement sans collision', () => {
     const names = FEATURE_KEYS.map(featureEnvVar)
     expect(new Set(names).size).toBe(names.length)
-    expect(featureEnvVar('operator.selfSignup')).toBe(
-      'FEATURE_OPERATOR_SELF_SIGNUP',
-    )
+    expect(featureEnvVar('whatsapp.contact')).toBe('FEATURE_WHATSAPP_CONTACT')
   })
 
   it('ne reconnaît pas une clé absente du registre', () => {
-    expect(isFeatureKey('operator.selfSignup')).toBe(true)
+    expect(isFeatureKey('whatsapp.contact')).toBe(true)
     expect(isFeatureKey('flag.inexistant')).toBe(false)
+    // `operator.selfSignup` a été retiré du registre au lot 1 : une clé
+    // supprimée doit cesser d'être reconnue, sinon une ligne restée en base
+    // continuerait d'être résolue en silence.
+    expect(isFeatureKey('operator.selfSignup')).toBe(false)
     // Un flag ne doit pas pouvoir naître d'une propriété héritée d'Object.
     expect(isFeatureKey('toString')).toBe(false)
   })
@@ -140,11 +147,24 @@ describe('bascule', () => {
 })
 
 describe('garde-fou serveur', () => {
-  // Le test qui compte. Masquer le formulaire côté écran ne ferme rien : la
-  // mutation reste appelable directement, comme n'importe quel appel d'API.
-  // C'est `withFeature` qui la refuse réellement.
-  function caller(selfSignup: boolean) {
-    return createCaller({
+  // Le test qui compte. Masquer un écran ne ferme rien : la mutation reste
+  // appelable directement, comme n'importe quel appel d'API. C'est
+  // `withFeature` qui la refuse réellement.
+  //
+  // Il s'exerce sur un router construit ici, et non sur une procédure de
+  // l'application : depuis le lot 1, plus aucun flag ne garde de procédure
+  // (`operator.selfSignup` a disparu avec l'auto-inscription). Tester le
+  // middleware directement garde la couverture pour le prochain flag qui en
+  // aura besoin — sans lui, `withFeature` deviendrait du code non vérifié.
+  const router = createTRPCRouter({
+    garde: protectedProcedure
+      .use(withFeature(KEY))
+      .query(() => 'passé'),
+  })
+  const callTestRouter = createCallerFactory(router)
+
+  function caller(enabled: boolean) {
+    return callTestRouter({
       db,
       headers: new Headers(),
       user: {
@@ -153,21 +173,17 @@ describe('garde-fou serveur', () => {
         name: 'Touriste',
         role: 'tourist',
       },
-      features: { ...FEATURE_DEFAULTS, 'operator.selfSignup': selfSignup },
+      features: { ...FEATURE_DEFAULTS, [KEY]: enabled },
     })
   }
 
-  it('refuse operator.requestAccess quand le flag est éteint', async () => {
-    await expect(
-      caller(false).operator.requestAccess({ displayName: 'Contournement' }),
-    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' })
+  it('refuse la procédure quand le flag est éteint', async () => {
+    await expect(caller(false).garde()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    })
   })
 
-  it('laisse passer la validation quand le flag est allumé', async () => {
-    // L'utilisateur n'existe pas : la clé étrangère échouera. Ce qui compte est
-    // que l'appel dépasse le middleware au lieu d'être arrêté par lui.
-    await expect(
-      caller(true).operator.requestAccess({ displayName: 'Nouvel opérateur' }),
-    ).rejects.not.toMatchObject({ code: 'PRECONDITION_FAILED' })
+  it('laisse passer quand le flag est allumé', async () => {
+    await expect(caller(true).garde()).resolves.toBe('passé')
   })
 })

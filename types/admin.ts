@@ -9,44 +9,22 @@ import type {
 // Contrat de sortie de l'espace d'administration.
 //
 // L'admin voit ce qu'aucun autre rôle ne voit : les brouillons de tous les
-// opérateurs, l'identité derrière un nom commercial, et les demandes d'accès
-// en attente. D'où un contrat séparé — ces champs ne doivent jamais fuiter
-// dans une réponse publique par un `include` malheureux.
+// opérateurs et l'identité réelle derrière un nom commercial. D'où un contrat
+// séparé — ces champs ne doivent jamais fuiter dans une réponse publique par un
+// `include` malheureux.
+//
+// Lot 1 : ni file de modération, ni demandes d'accès en attente, ni listing de
+// comptes. Trip4mauritius tient le catalogue et crée les opérateurs elle-même.
 
-export interface ModerationActivity {
-  id: string
-  slug: string
-  title: string
-  category: string
-  region: string
-  imageUrl: string
-  priceHT: number
-  duration: string
-  maxParticipants: number
-  languages: string[]
-  included: string[]
-  excluded: string[]
-  imageUrls: string[]
-  description: Record<'fr' | 'en' | 'de' | 'es' | 'ru', string>
-  status: ActivityStatus
-  operatorName: string
-  operatorId: string
-  operatorVerified: boolean
-  upcomingSlots: number
-  submittedAt: string
-}
-
-export interface OperatorRequest {
+export interface AdminOperator {
   operatorId: string
   userId: string
   displayName: string
   /** Identité réelle derrière le nom commercial — réservé à l'admin. */
   userName: string
   userEmail: string
-  verified: boolean
-  role: string
   activityCount: number
-  requestedAt: string
+  createdAt: string
 }
 
 /** Couche de la cascade qui a eu le dernier mot. Voir server/services/features.ts. */
@@ -113,24 +91,6 @@ export interface AdminBookingsPage {
   pages: number
 }
 
-export interface AdminUserRow {
-  id: string
-  name: string
-  email: string
-  role: string
-  createdAt: string
-  bookingsCount: number
-  /** Nom commercial si le compte porte un profil opérateur, sinon null. */
-  operatorName: string | null
-  operatorVerified: boolean
-}
-
-export interface AdminUsersPage {
-  users: AdminUserRow[]
-  total: number
-  pages: number
-}
-
 // Catalogue vu par l'admin.
 //
 // On ÉTEND le contrat opérateur au lieu de le recopier : c'est la même entité,
@@ -167,9 +127,8 @@ export interface AdminOperatorOption {
 }
 
 export interface AdminOverview {
-  pendingActivities: number
-  pendingOperators: number
   publishedActivities: number
+  pendingBookings: number
+  confirmedBookings: number
   totalOperators: number
-  totalBookings: number
 }

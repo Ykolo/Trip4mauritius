@@ -1,21 +1,22 @@
 import {
-  activityIdSchema,
   adminActivitiesSchema,
   adminActivityStatusSchema,
   adminBookingsSchema,
   adminCreateActivitySchema,
   adminUpdateActivitySchema,
-  adminUsersSchema,
-  moderationQueueSchema,
   createCategorySchema,
+  createOperatorSchema,
   moveCategorySchema,
-  operatorIdSchema,
   resetFeatureSchema,
   setCategoryActiveSchema,
   setFeatureSchema,
   updateCategorySchema,
 } from '@/lib/schemas/admin'
-import { createSlotsSchema, deleteSlotSchema } from '@/lib/schemas/operator'
+import {
+  activityIdSchema,
+  createSlotsSchema,
+  deleteSlotSchema,
+} from '@/lib/schemas/operator'
 import {
   createActivityForAdmin,
   createSlotsForAdmin,
@@ -27,15 +28,10 @@ import {
   updateActivityForAdmin,
 } from '@/server/services/admin-catalog'
 import {
-  approveOperator,
+  createOperator,
   getOverview,
-  listActivitiesForModeration,
   listBookingsForAdmin,
-  listUsersForAdmin,
-  listOperatorRequests,
-  publishActivity,
-  rejectActivity,
-  revokeOperator,
+  listOperators,
 } from '@/server/services/admin'
 import {
   createCategory,
@@ -49,62 +45,56 @@ import {
   resetFeatureFlag,
   setFeatureFlag,
 } from '@/server/services/features'
-import { adminProcedure, createTRPCRouter } from '@/server/trpc/init'
+import {
+  adminProcedure,
+  createTRPCRouter,
+  superAdminProcedure,
+} from '@/server/trpc/init'
 
-// Tout est en `adminProcedure`, sans exception.
+// Tout est en `adminProcedure` au minimum, sans exception.
 //
 // Ce router expose les brouillons de tous les opérateurs et l'identité derrière
 // chaque nom commercial : une seule procédure laissée en `protectedProcedure`
 // par distraction ouvrirait tout cela à n'importe quel compte connecté.
+//
+// Trois procédures montent d'un cran en `superAdminProcedure` — les
+// interrupteurs de fonctionnalité, qui relèvent du prestataire et non du
+// client.
 
 export const adminRouter = createTRPCRouter({
   overview: adminProcedure.query(() => getOverview()),
 
-  moderationQueue: adminProcedure
-    .input(moderationQueueSchema)
-    .query(({ input }) => listActivitiesForModeration(input.status)),
+  operators: adminProcedure.query(() => listOperators()),
 
-  publishActivity: adminProcedure
-    .input(activityIdSchema)
-    .mutation(({ input }) => publishActivity(input.activityId)),
+  // Le seul chemin vers le rôle `operator` depuis que l'auto-inscription a
+  // disparu. Il vit ici, en `adminProcedure`, et nulle part ailleurs.
+  createOperator: adminProcedure
+    .input(createOperatorSchema)
+    .mutation(({ input }) => createOperator(input)),
 
-  rejectActivity: adminProcedure
-    .input(activityIdSchema)
-    .mutation(({ input }) => rejectActivity(input.activityId)),
-
-  operatorRequests: adminProcedure.query(() => listOperatorRequests()),
-
-  approveOperator: adminProcedure
-    .input(operatorIdSchema)
-    .mutation(({ input }) => approveOperator(input.operatorId)),
-
-  revokeOperator: adminProcedure
-    .input(operatorIdSchema)
-    .mutation(({ input }) => revokeOperator(input.operatorId)),
-
-  features: adminProcedure.query(() => listFeatureFlags()),
+  // Les interrupteurs sont réservés au super admin (Kled), pas à
+  // l'administrateur Trip4mauritius : ils commandent ce que le client voit,
+  // c'est un réglage de prestataire, pas d'exploitation courante.
+  //
+  // La garde est ici, pas seulement dans la barre de navigation : cacher
+  // l'onglet ne ferme rien, la procédure resterait appelable.
+  features: superAdminProcedure.query(() => listFeatureFlags()),
 
   // `ctx.user.email` et jamais une valeur venue de la requête : un auteur que
   // l'appelant choisit lui-même ne journalise rien.
-  setFeature: adminProcedure
+  setFeature: superAdminProcedure
     .input(setFeatureSchema)
     .mutation(({ ctx, input }) =>
       setFeatureFlag(input.key, input.enabled, ctx.user.email),
     ),
 
-  resetFeature: adminProcedure
+  resetFeature: superAdminProcedure
     .input(resetFeatureSchema)
     .mutation(({ input }) => resetFeatureFlag(input.key)),
 
-  // Lecture seule, et volontairement : rien ici ne change un rôle.
-  // `approveOperator` reste le seul chemin vers le rôle opérateur.
   bookings: adminProcedure
     .input(adminBookingsSchema)
     .query(({ input }) => listBookingsForAdmin(input)),
-
-  users: adminProcedure
-    .input(adminUsersSchema)
-    .query(({ input }) => listUsersForAdmin(input)),
 
   // Catalogue.
   //

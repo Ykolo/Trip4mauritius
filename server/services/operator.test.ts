@@ -9,8 +9,7 @@ import {
   getOperatorActivity,
   listOperatorActivities,
   listOperatorBookings,
-  requestOperatorAccess,
-  submitForModeration,
+  publishOwnActivity,
   updateActivity,
 } from '@/server/services/operator'
 import { listActivities } from '@/server/services/activity'
@@ -172,23 +171,23 @@ describe('cycle de vie des activités', () => {
     expect(created.status).toBe('draft')
   })
 
-  it('refuse la soumission tant qu\'aucun créneau n\'existe', async () => {
+  it('refuse la mise en ligne tant qu\'aucun créneau n\'existe', async () => {
     const a = await makeOperator('a')
     const created = await createActivity(a.operatorId, await activityInput())
 
     await expect(
-      submitForModeration(a.operatorId, created.id),
+      publishOwnActivity(a.operatorId, created.id),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
 
     await createSlots(a.operatorId, created.id, [
       { date: tomorrow(), time: '08:00', maxSpots: 4 },
     ])
 
-    const submitted = await submitForModeration(a.operatorId, created.id)
-    expect(submitted.status).toBe('pending_moderation')
+    const published = await publishOwnActivity(a.operatorId, created.id)
+    expect(published.status).toBe('published')
   })
 
-  it('renvoie en modération une activité publiée que l\'on modifie', async () => {
+  it('laisse en ligne une activité publiée que l\'on modifie', async () => {
     const a = await makeOperator('a')
     const created = await createActivity(a.operatorId, await activityInput())
     await db.activity.update({
@@ -202,9 +201,9 @@ describe('cycle de vie des activités', () => {
       await activityInput({ title: `${TEST_PREFIX}titre remplacé` }),
     )
 
-    // Sans cette règle, on ferait valider un texte anodin puis on le
-    // remplacerait une fois en ligne.
-    expect(updated.status).toBe('pending_moderation')
+    // La modification renvoyait la fiche en modération. Sans file d'attente,
+    // cette règle la retirerait du catalogue sans que rien ne l'y ramène.
+    expect(updated.status).toBe('published')
   })
 
   it('archive au lieu de supprimer, et sort du catalogue public', async () => {
@@ -311,38 +310,5 @@ describe('créneaux', () => {
     ])
 
     expect(after.slots).toHaveLength(2)
-  })
-})
-
-describe('demande d\'accès opérateur', () => {
-  it('ne promeut PAS son appelant', async () => {
-    const user = await db.user.create({
-      data: {
-        email: `${TEST_PREFIX}candidate-${Date.now()}@example.test`,
-        name: 'Candidat',
-      },
-    })
-
-    const profile = await requestOperatorAccess(user.id, 'Ma Société')
-
-    expect(profile.verified).toBe(false)
-    // LE point : le rôle reste `tourist`. Si cette procédure promouvait, elle
-    // serait un endpoint d'auto-promotion.
-    const after = await db.user.findUniqueOrThrow({ where: { id: user.id } })
-    expect(after.role).toBe('tourist')
-  })
-
-  it('refuse une seconde demande pour le même compte', async () => {
-    const user = await db.user.create({
-      data: {
-        email: `${TEST_PREFIX}candidate2-${Date.now()}@example.test`,
-        name: 'Candidat',
-      },
-    })
-
-    await requestOperatorAccess(user.id, 'Ma Société')
-    await expect(
-      requestOperatorAccess(user.id, 'Autre nom'),
-    ).rejects.toMatchObject({ code: 'CONFLICT' })
   })
 })

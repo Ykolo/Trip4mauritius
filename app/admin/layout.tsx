@@ -2,76 +2,83 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useQuery } from '@tanstack/react-query'
 import {
   LayoutDashboard,
   MapPin,
-  ShieldCheck,
   Store,
   Tags,
   Ticket,
   ToggleLeft,
-  Users,
 } from 'lucide-react'
 import { AdminGuard } from '@/components/layout/AdminGuard'
-import { useTRPC } from '@/lib/trpc/client'
+import { useSession } from '@/lib/auth-client'
+
+// Navigation par barre du bas, comme le reste du site.
+//
+// C'était une barre haute collante. Le parcours d'administration se fait au
+// pouce sur mobile, comme l'espace public et l'espace opérateur : trois
+// grammaires de navigation dans une même application obligeaient l'utilisateur
+// à réapprendre à chaque changement d'espace.
+//
+// L'onglet « Modération » a disparu au lot 1 — Trip4mauritius tient son
+// catalogue, il n'y a plus de file d'attente. « Comptes » aussi : il n'existe
+// pas de gestion de compte.
 
 const TABS = [
-  { href: '/admin', label: "Vue d'ensemble", icon: LayoutDashboard },
+  { href: '/admin', label: 'Résumé', icon: LayoutDashboard },
   { href: '/admin/activities', label: 'Catalogue', icon: MapPin },
-  { href: '/admin/moderation', label: 'Modération', icon: ShieldCheck },
-  { href: '/admin/bookings', label: 'Réservations', icon: Ticket },
+  { href: '/admin/bookings', label: 'Résas', icon: Ticket },
   { href: '/admin/operators', label: 'Opérateurs', icon: Store },
-  { href: '/admin/users', label: 'Comptes', icon: Users },
   { href: '/admin/categories', label: 'Catégories', icon: Tags },
-  { href: '/admin/features', label: 'Fonctionnalités', icon: ToggleLeft },
 ]
 
-/** Pastille de file d'attente — un chiffre visible évite qu'une demande
- *  attende parce que personne n'a pensé à ouvrir l'onglet. */
-function Badge({ count }: { count: number }) {
-  if (count === 0) return null
-  return (
-    <span className="ml-auto min-w-[20px] h-5 px-1.5 flex items-center justify-center bg-primary text-white text-xs font-bold rounded-full">
-      {count > 99 ? '99+' : count}
-    </span>
-  )
+/** Réservé au super admin (Kled). Voir `superAdminProcedure`. */
+const SUPER_ADMIN_TAB = {
+  href: '/admin/features',
+  label: 'Réglages',
+  icon: ToggleLeft,
 }
 
 function AdminNav() {
   const pathname = usePathname()
-  const trpc = useTRPC()
-  const { data: overview } = useQuery(trpc.admin.overview.queryOptions())
 
-  const counts: Record<string, number> = {
-    '/admin/moderation': overview?.pendingActivities ?? 0,
-    '/admin/operators': overview?.pendingOperators ?? 0,
-  }
+  // Le rôle vient de la SESSION, pas de `operator.myProfile` : cette procédure
+  // renvoie `null` pour tout compte sans profil opérateur — donc pour l'admin
+  // comme pour le super admin, et l'onglet n'apparaîtrait jamais.
+  //
+  // Masquer l'onglet n'est que du confort de toute façon :
+  // `superAdminProcedure` refuse un `admin` qui appellerait la procédure
+  // directement.
+  const { data: session } = useSession()
+  const tabs =
+    session?.user?.role === 'superadmin' ? [...TABS, SUPER_ADMIN_TAB] : TABS
 
   return (
-    <nav className="bg-white border-b border-muted/10 sticky top-0 z-40">
-      <div className="max-w-5xl mx-auto px-4 flex items-center gap-1 overflow-x-auto">
-        <span className="font-display text-primary text-lg pr-4 whitespace-nowrap">
-          Administration
-        </span>
-        {TABS.map((tab) => {
+    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-muted/20 pb-[env(safe-area-inset-bottom)]">
+      <div className="flex items-stretch justify-around max-w-2xl mx-auto">
+        {tabs.map((tab) => {
           const active =
             tab.href === '/admin'
               ? pathname === '/admin'
               : pathname.startsWith(tab.href)
+          const Icon = tab.icon
+
           return (
             <Link
               key={tab.href}
               href={tab.href}
-              className={`flex items-center gap-2 px-4 py-4 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
-                active
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted hover:text-ink'
+              aria-current={active ? 'page' : undefined}
+              className={`relative flex flex-1 flex-col items-center justify-center gap-1 min-h-[56px] px-1 py-2 active:scale-95 transition-transform ${
+                active ? 'text-primary' : 'text-muted'
               }`}
             >
-              <tab.icon className="w-4 h-4" />
-              {tab.label}
-              <Badge count={counts[tab.href] ?? 0} />
+              <Icon className="w-5 h-5 shrink-0" />
+              <span className="text-[11px] font-medium leading-none text-center">
+                {tab.label}
+              </span>
+              {active && (
+                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-primary rounded-full" />
+              )}
             </Link>
           )
         })}
@@ -88,8 +95,11 @@ export default function AdminLayout({
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
       <AdminGuard>
+        {/* La marge basse réserve la hauteur de la barre : sans elle, le
+            dernier élément de chaque écran passe dessous et devient
+            inatteignable. */}
+        <main className="pb-24">{children}</main>
         <AdminNav />
-        <main>{children}</main>
       </AdminGuard>
     </div>
   )

@@ -1,0 +1,16 @@
+-- Rôle super admin (Kled, le prestataire).
+--
+-- Écrite à la main plutôt que générée : `prisma migrate dev` exigeait un reset
+-- de la base à cause d'un écart de checksum sur `20260902120000_add_categories`
+-- — le fichier avait été retouché après son application sur la branche `dev`.
+-- Les deux schémas ont été comparés et sont identiques ; reconstruire la base
+-- aurait détruit des données pour un écart purement cosmétique.
+--
+-- `ADD VALUE` est ADDITIF : aucune ligne existante n'est touchée, et le code
+-- déployé qui ignore cette valeur continue de fonctionner. C'est l'inverse d'un
+-- retrait de valeur, qui imposerait de recréer le type et de réécrire les
+-- contraintes CHECK posées à la main.
+--
+-- `IF NOT EXISTS` rend la migration rejouable sur une base où la valeur aurait
+-- déjà été posée à la main.
+ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'superadmin';
