@@ -1,5 +1,4 @@
 import 'dotenv/config'
-import { randomBytes } from 'node:crypto'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { ActivityStatus, PrismaClient, UserRole } from '@prisma/client'
 import { hashPassword } from 'better-auth/crypto'
@@ -168,25 +167,43 @@ function buildExcluded(a: SeedActivity): string[] {
 const CREDENTIAL_PROVIDER_ID = 'credential'
 const CREDENTIAL_ISSUER = 'local:credential'
 
+// Les adresses des deux comptes hors opérateurs. Constantes plutôt que
+// littéraux : le récapitulatif affiché en fin de seed les relit, et deux
+// littéraux séparés finiraient par diverger d'une lettre.
+const ADMIN_EMAIL = 'admin@mauriexplore.mu'
+const TOURIST_EMAIL = 'tourist@example.com'
+
 /** Doit rester aligné sur `minPasswordLength` dans lib/auth.ts. */
 const MIN_PASSWORD_LENGTH = 12
 
-function resolveSeedPassword(): { password: string; generated: boolean } {
+/**
+ * Mot de passe de tous les comptes prédéfinis, en clair et versionné.
+ *
+ * C'est un choix assumé, pas un oubli. Le seed précédent tirait une valeur au
+ * hasard et ne l'affichait qu'une fois : quiconque manquait cette ligne de
+ * terminal se retrouvait avec un admin inaccessible et aucun moyen de revenir
+ * en arrière.
+ *
+ * Le prix est réel et doit être connu : **le dépôt est public**, donc cette
+ * valeur l'est aussi. Elle ne vaut que pour des données de démonstration. Toute
+ * base ouverte à de vrais utilisateurs — la production en premier lieu — doit
+ * poser `SEED_PASSWORD`, qui reprend la main ci-dessous.
+ */
+const DEFAULT_SEED_PASSWORD = 'AdminTrip4Mauritius'
+
+function resolveSeedPassword(): { password: string; fromEnv: boolean } {
   const provided = process.env.SEED_PASSWORD?.trim()
 
-  if (provided) {
-    if (provided.length < MIN_PASSWORD_LENGTH) {
-      throw new Error(
-        `SEED_PASSWORD fait ${provided.length} caractères ; l'application en exige ${MIN_PASSWORD_LENGTH}. ` +
-          'Le seed écrirait un mot de passe que le formulaire de connexion refuserait.',
-      )
-    }
-    return { password: provided, generated: false }
+  if (!provided) return { password: DEFAULT_SEED_PASSWORD, fromEnv: false }
+
+  if (provided.length < MIN_PASSWORD_LENGTH) {
+    throw new Error(
+      `SEED_PASSWORD fait ${provided.length} caractères ; l'application en exige ${MIN_PASSWORD_LENGTH}. ` +
+        'Le seed écrirait un mot de passe que le formulaire de connexion refuserait.',
+    )
   }
 
-  // Pas de mot de passe par défaut en dur : il finirait committé, puis en
-  // production. On en tire un au hasard et on l'affiche une fois.
-  return { password: randomBytes(12).toString('base64url'), generated: true }
+  return { password: provided, fromEnv: true }
 }
 
 async function setPassword(userId: string, password: string): Promise<void> {
@@ -218,15 +235,15 @@ function operatorKeyFor(category: string): string {
 async function main() {
   console.log('→ Seed MauriExplore')
 
-  const { password: seedPassword, generated } = resolveSeedPassword()
+  const { password: seedPassword, fromEnv } = resolveSeedPassword()
 
   // Admin : créé uniquement ici, jamais par l'application. Aucun endpoint ne
   // doit pouvoir fabriquer un compte admin.
   const admin = await db.user.upsert({
-    where: { email: 'admin@mauriexplore.mu' },
+    where: { email: ADMIN_EMAIL },
     update: { role: UserRole.admin },
     create: {
-      email: 'admin@mauriexplore.mu',
+      email: ADMIN_EMAIL,
       name: 'Admin MauriExplore',
       emailVerified: true,
       role: UserRole.admin,
@@ -238,10 +255,10 @@ async function main() {
 
   // Un touriste de test, pour pouvoir exercer le tunnel de réservation.
   const tourist = await db.user.upsert({
-    where: { email: 'tourist@example.com' },
+    where: { email: TOURIST_EMAIL },
     update: {},
     create: {
-      email: 'tourist@example.com',
+      email: TOURIST_EMAIL,
       name: 'Touriste Test',
       emailVerified: true,
       role: UserRole.tourist,
@@ -340,13 +357,25 @@ async function main() {
   console.log(`  créneaux: ${slotCount}`)
   console.log('✓ Seed terminé')
 
+  // Récapitulatif des comptes prédéfinis. Construit à partir des mêmes
+  // constantes que les écritures ci-dessus : il ne peut donc pas annoncer un
+  // identifiant que le seed n'a pas réellement écrit.
+  const accounts: Array<[role: string, email: string]> = [
+    ['admin', ADMIN_EMAIL],
+    ...OPERATORS.map((o) => [o.verified ? 'opérateur' : 'opérateur (non vérifié)', o.email] as [string, string]),
+    ['touriste', TOURIST_EMAIL],
+  ]
+
   console.log('')
-  console.log('  Connexion — admin@mauriexplore.mu, les 4 opérateurs et tourist@example.com')
-  if (generated) {
-    console.log(`  Mot de passe TIRÉ AU HASARD : ${seedPassword}`)
-    console.log('  Il ne sera plus affiché. Poser SEED_PASSWORD pour en choisir un.')
-  } else {
-    console.log('  Mot de passe : celui de SEED_PASSWORD.')
+  console.log(`  Comptes prédéfinis — mot de passe : ${seedPassword}`)
+  for (const [role, email] of accounts) {
+    console.log(`    ${role.padEnd(24)} ${email}`)
+  }
+
+  if (!fromEnv) {
+    console.log('')
+    console.log('  ⚠ Mot de passe par défaut, en clair dans prisma/seed.ts et sur un dépôt public.')
+    console.log('    Poser SEED_PASSWORD pour toute base accessible à de vrais utilisateurs.')
   }
 }
 
