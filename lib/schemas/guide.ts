@@ -36,10 +36,6 @@ export const updateGuideSchema = z.object({
   data: guideInputSchema,
 })
 
-export const guideCategoryIdSchema = z.object({
-  categoryId: z.string().min(1),
-})
-
 export const createGuideCategorySchema = z.object({
   label: z.string().min(1).max(80),
 })

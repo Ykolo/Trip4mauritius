@@ -20,7 +20,6 @@ import {
 import {
   createGuideCategorySchema,
   createGuideSchema,
-  guideCategoryIdSchema,
   guideIdSchema,
   renameGuideCategorySchema,
   setGuideCategoryActiveSchema,
