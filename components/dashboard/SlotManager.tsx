@@ -22,19 +22,48 @@ interface DraftSlot {
 export function SlotManager({
   activityId,
   defaultCapacity,
+  scope = 'operator',
 }: {
   activityId: string
   defaultCapacity: number
+  /**
+   * `operator` lit et écrit sous `ctx.operator.id` ; `admin` sur n'importe
+   * quelle activité. Les deux surfaces convertissent la même heure murale
+   * mauricienne — d'où un seul composant plutôt qu'une copie qui aurait fini
+   * par envoyer un ISO du navigateur.
+   */
+  scope?: 'operator' | 'admin'
 }) {
   const trpc = useTRPC()
   const queryClient = useQueryClient()
   const [drafts, setDrafts] = useState<DraftSlot[]>([])
+  const isAdmin = scope === 'admin'
 
-  const { data: activity, isLoading } = useQuery(
-    trpc.operator.getActivity.queryOptions({ activityId }),
-  )
+  // Les deux requêtes sont déclarées, une seule est activée : un `useQuery`
+  // conditionnel casserait l'ordre des hooks.
+  const operatorQuery = useQuery({
+    ...trpc.operator.getActivity.queryOptions({ activityId }),
+    enabled: !isAdmin,
+  })
+  const adminQuery = useQuery({
+    ...trpc.admin.activity.queryOptions({ activityId }),
+    enabled: isAdmin,
+  })
+
+  const activity = isAdmin ? adminQuery.data : operatorQuery.data
+  const isLoading = isAdmin ? adminQuery.isLoading : operatorQuery.isLoading
 
   const invalidate = () => {
+    if (isAdmin) {
+      queryClient.invalidateQueries({
+        queryKey: trpc.admin.activity.queryKey({ activityId }),
+      })
+      queryClient.invalidateQueries({
+        queryKey: trpc.admin.activities.queryKey(),
+      })
+      return
+    }
+
     queryClient.invalidateQueries({
       queryKey: trpc.operator.getActivity.queryKey({ activityId }),
     })
@@ -43,18 +72,28 @@ export function SlotManager({
     })
   }
 
-  const createSlots = useMutation(
-    trpc.operator.createSlots.mutationOptions({
-      onSuccess: () => {
-        setDrafts([])
-        invalidate()
-      },
-    }),
-  )
+  const onCreated = {
+    onSuccess: () => {
+      setDrafts([])
+      invalidate()
+    },
+  }
 
-  const removeSlot = useMutation(
+  const operatorCreateSlots = useMutation(
+    trpc.operator.createSlots.mutationOptions(onCreated),
+  )
+  const adminCreateSlots = useMutation(
+    trpc.admin.createSlots.mutationOptions(onCreated),
+  )
+  const operatorRemoveSlot = useMutation(
     trpc.operator.deleteSlot.mutationOptions({ onSuccess: invalidate }),
   )
+  const adminRemoveSlot = useMutation(
+    trpc.admin.deleteSlot.mutationOptions({ onSuccess: invalidate }),
+  )
+
+  const createSlots = isAdmin ? adminCreateSlots : operatorCreateSlots
+  const removeSlot = isAdmin ? adminRemoveSlot : operatorRemoveSlot
 
   const today = new Date().toISOString().slice(0, 10)
 

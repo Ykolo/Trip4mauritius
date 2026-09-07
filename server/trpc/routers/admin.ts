@@ -1,6 +1,10 @@
 import {
   activityIdSchema,
+  adminActivitiesSchema,
+  adminActivityStatusSchema,
   adminBookingsSchema,
+  adminCreateActivitySchema,
+  adminUpdateActivitySchema,
   adminUsersSchema,
   moderationQueueSchema,
   createCategorySchema,
@@ -11,6 +15,17 @@ import {
   setFeatureSchema,
   updateCategorySchema,
 } from '@/lib/schemas/admin'
+import { createSlotsSchema, deleteSlotSchema } from '@/lib/schemas/operator'
+import {
+  createActivityForAdmin,
+  createSlotsForAdmin,
+  deleteSlotForAdmin,
+  getActivityForAdmin,
+  listActivitiesForAdmin,
+  listOperatorOptions,
+  setActivityStatusForAdmin,
+  updateActivityForAdmin,
+} from '@/server/services/admin-catalog'
 import {
   approveOperator,
   getOverview,
@@ -90,6 +105,47 @@ export const adminRouter = createTRPCRouter({
   users: adminProcedure
     .input(adminUsersSchema)
     .query(({ input }) => listUsersForAdmin(input)),
+
+  // Catalogue.
+  //
+  // Ces procédures ÉCRIVENT le catalogue de n'importe quel opérateur — c'est
+  // leur raison d'être, et c'est pourquoi elles n'existent qu'ici. La même
+  // fonctionnalité sans `adminProcedure` serait un droit d'édition universel.
+  activities: adminProcedure
+    .input(adminActivitiesSchema)
+    .query(({ input }) => listActivitiesForAdmin(input)),
+
+  activity: adminProcedure
+    .input(activityIdSchema)
+    .query(({ input }) => getActivityForAdmin(input.activityId)),
+
+  operatorOptions: adminProcedure.query(() => listOperatorOptions()),
+
+  createActivity: adminProcedure
+    .input(adminCreateActivitySchema)
+    .mutation(({ input }) =>
+      createActivityForAdmin(input.operatorId, input.data),
+    ),
+
+  updateActivity: adminProcedure
+    .input(adminUpdateActivitySchema)
+    .mutation(({ input }) =>
+      updateActivityForAdmin(input.activityId, input.data),
+    ),
+
+  setActivityStatus: adminProcedure
+    .input(adminActivityStatusSchema)
+    .mutation(({ input }) =>
+      setActivityStatusForAdmin(input.activityId, input.status),
+    ),
+
+  createSlots: adminProcedure
+    .input(createSlotsSchema)
+    .mutation(({ input }) => createSlotsForAdmin(input.activityId, input.slots)),
+
+  deleteSlot: adminProcedure
+    .input(deleteSlotSchema)
+    .mutation(({ input }) => deleteSlotForAdmin(input.slotId)),
 
   categories: adminProcedure.query(() => listCategoriesForAdmin()),
 

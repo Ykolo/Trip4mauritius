@@ -36,6 +36,7 @@ types/               contrat de sortie : Activity, ActivityFull, Booking…
 - **Le panier vit dans le navigateur** (`lib/stores/cart.ts`, Zustand + localStorage), pas en base. Tout ce qu'il contient est modifiable par l'utilisateur : `booking.create` ne reçoit que `slotId` + `participants`, jamais un montant.
 - **Toute écriture concurrente sur un créneau passe par un UPDATE conditionnel atomique**, jamais par un read-then-write. Même schéma pour l'annulation (`updateMany` gardé sur le statut). Les lignes de panier sont **triées par `slotId`** avant traitement : sans cet ordre de verrouillage commun, deux paniers croisés s'interbloquent.
 - **Tout router `operator` filtre par `ctx.operator.id`**, y compris en lecture par id.
+- **Les écritures de catalogue non filtrées vivent dans `server/services/admin-catalog.ts`, jamais dans `operator.ts`.** C'est l'exact inverse de la règle ci-dessus, et c'est voulu : le back-office édite la fiche de n'importe quel opérateur. Les mettre dans le même fichier poserait, côte à côte, des requêtes filtrées et des requêtes ouvertes — et le prochain copier-coller prendrait la mauvaise. Deux conséquences à ne pas « corriger » : modifier une fiche publiée **ne la renvoie pas en modération** (l'admin *est* la file ; sinon toute faute de frappe sortirait la fiche du catalogue), et le statut se pose par `setActivityStatus` sans passer par `publishActivity`, dont la garde sur `pending_moderation` protège les brouillons privés des opérateurs.
 - **`role` est en `input: false`** dans Better Auth — sinon on pourrait s'inscrire admin. Le formulaire d'inscription ne propose donc aucun choix de rôle : tout le monde s'inscrit `tourist`.
 - **`server/services/admin.ts` est le SEUL fichier qui écrit `User.role`**, et il ne sait pas fabriquer d'admin : le premier et unique admin vient du seed. `operator.requestAccess` crée un profil `Operator` sans toucher au rôle — sans quoi ce serait un endpoint d'auto-promotion.
 - **La description d'activité n'exige que le français.** Les traductions manquantes sont comblées à la lecture par `toDescription` (`server/mappers/activity.ts`). Exiger les 5 langues à l'écriture poussait à coller cinq fois le même texte, et la base ne distinguait plus une traduction d'un copier-coller.
@@ -82,8 +83,9 @@ Les tests d'intégration y visent un **Postgres jetable lancé dans le runner** 
 | 9 · Interrupteurs de fonctionnalité | ✅ registre, cascade, garde-fou tRPC, écran `/admin/features` |
 | 10 · Catégories | ✅ table + CRUD admin `/admin/categories`, trois listes en dur supprimées |
 | 11 · Back-office | ✅ listing des réservations (deux contacts par ligne) et des comptes — **lecture seule** |
+| 12 · Catalogue admin | ✅ `/admin/activities` — l'admin saisit et corrige les fiches de n'importe quel opérateur |
 
-**68 tests verts** (`npm test`) : concurrence, RULE-001, annulation, cloisonnement opérateur, fuseau, modération, cascade des flags, catégories, cloisonnement des listings.
+**80 tests verts** (`npm test`) : concurrence, RULE-001, annulation, cloisonnement opérateur, fuseau, modération, cascade des flags, catégories, cloisonnement des listings, écarts du catalogue admin.
 
 ## Dettes assumées — acceptables avant lancement, pas au lancement
 
