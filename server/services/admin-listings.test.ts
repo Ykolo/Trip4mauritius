@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '@/lib/db'
-import { listBookingsForAdmin, listUsersForAdmin } from '@/server/services/admin'
+import { listBookingsForAdmin } from '@/server/services/admin'
 import { createBookings } from '@/server/services/booking'
 import { testCategoryId } from '@/server/services/test-support'
 import { createCaller } from '@/server/trpc/root'
@@ -166,45 +166,6 @@ describe('listing des réservations', () => {
   })
 })
 
-describe('listing des comptes', () => {
-  it("montre le nom commercial et le nombre de réservations", async () => {
-    const ctx = await bookedDeparture('e')
-
-    const { users } = await listUsersForAdmin({
-      page: 1,
-      role: 'all',
-      search: ctx.tourist.email,
-    })
-    expect(users[0]).toMatchObject({
-      email: ctx.tourist.email,
-      role: 'tourist',
-      bookingsCount: 1,
-      operatorName: null,
-    })
-
-    const pro = await listUsersForAdmin({
-      page: 1,
-      role: 'all',
-      search: ctx.operatorUser.email,
-    })
-    expect(pro.users[0]).toMatchObject({
-      role: 'operator',
-      operatorName: ctx.operator.displayName,
-    })
-  })
-
-  it('filtre par rôle', async () => {
-    const ctx = await bookedDeparture('f')
-
-    const tourists = await listUsersForAdmin({
-      page: 1,
-      role: 'tourist',
-      search: ctx.operatorUser.email,
-    })
-    expect(tourists.total).toBe(0)
-  })
-})
-
 describe('cloisonnement', () => {
   // Ces deux listings exposent les coordonnées de TOUS les touristes et de tous
   // les opérateurs. Une procédure laissée en `protectedProcedure` par
@@ -224,15 +185,40 @@ describe('cloisonnement', () => {
   }
 
   it.each(['tourist', 'operator'] as const)(
-    'refuse admin.bookings et admin.users à un compte %s',
+    'refuse admin.bookings et admin.operators à un compte %s',
     async (role) => {
       await expect(
         callerAs(role).admin.bookings({ page: 1, status: 'all', period: 'all' }),
       ).rejects.toMatchObject({ code: 'FORBIDDEN' })
 
-      await expect(
-        callerAs(role).admin.users({ page: 1, role: 'all' }),
-      ).rejects.toMatchObject({ code: 'FORBIDDEN' })
+      await expect(callerAs(role).admin.operators()).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+      })
     },
   )
+
+  // L'asymétrie qui compte : `admin` gère la plateforme mais ne touche pas aux
+  // interrupteurs, qui décident de ce qu'il voit. Seul Kled les manœuvre.
+  it('refuse les interrupteurs à un administrateur client', async () => {
+    const asAdmin = createCaller({
+      db,
+      headers: new Headers(),
+      user: {
+        id: 'utilisateur-test',
+        email: `${TEST_PREFIX}admin@example.test`,
+        name: 'Admin client',
+        role: 'admin',
+      },
+      features: { ...FEATURE_DEFAULTS },
+    })
+
+    await expect(asAdmin.admin.features()).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    })
+    // La lecture des réservations, elle, doit rester ouverte : sinon le test
+    // ci-dessus passerait pour une raison sans rapport.
+    await expect(
+      asAdmin.admin.bookings({ page: 1, status: 'all', period: 'all' }),
+    ).resolves.toBeDefined()
+  })
 })

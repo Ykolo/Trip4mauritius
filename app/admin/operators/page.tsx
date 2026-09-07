@@ -1,163 +1,174 @@
 'use client'
 
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BadgeCheck, Check, Clock, Loader2, ShieldOff } from 'lucide-react'
+import { Loader2, Plus, Store } from 'lucide-react'
 import { useTRPC } from '@/lib/trpc/client'
-import type { OperatorRequest } from '@/types/admin'
 
-function OperatorRow({ operator }: { operator: OperatorRequest }) {
+// Écran opérateurs — création et listing, plus de validation.
+//
+// Il portait une file de demandes d'accès avec « Valider » et « Révoquer ».
+// L'auto-inscription ayant disparu au lot 1, il n'y a plus rien à valider : un
+// opérateur existe parce que Trip4mauritius l'a créé.
+
+function CreateOperatorForm({ onDone }: { onDone: () => void }) {
   const trpc = useTRPC()
-  const queryClient = useQueryClient()
+  const [email, setEmail] = useState('')
+  const [name, setName] = useState('')
+  const [displayName, setDisplayName] = useState('')
+  const [error, setError] = useState<string | null>(null)
 
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: trpc.admin.pathKey() })
-    queryClient.invalidateQueries({ queryKey: trpc.activity.pathKey() })
-  }
-
-  const approve = useMutation(
-    trpc.admin.approveOperator.mutationOptions({ onSuccess: invalidate }),
+  const create = useMutation(
+    trpc.admin.createOperator.mutationOptions({
+      onSuccess: () => {
+        setEmail('')
+        setName('')
+        setDisplayName('')
+        setError(null)
+        onDone()
+      },
+      onError: (e) => setError(e.message),
+    }),
   )
-  const revoke = useMutation(
-    trpc.admin.revokeOperator.mutationOptions({ onSuccess: invalidate }),
-  )
-
-  const pending = approve.isPending || revoke.isPending
-  const error = approve.error ?? revoke.error
-  const isActive = operator.role === 'operator' || operator.role === 'admin'
 
   return (
-    <div className="bg-white rounded-2xl shadow-card border border-muted/10 p-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-semibold text-ink">{operator.displayName}</h3>
-            {operator.verified ? (
-              <span className="flex items-center gap-1 text-xs text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
-                <BadgeCheck className="w-3.5 h-3.5" />
-                Vérifié
-              </span>
-            ) : (
-              <span className="flex items-center gap-1 text-xs text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
-                <Clock className="w-3.5 h-3.5" />
-                En attente
-              </span>
-            )}
-            {operator.role === 'admin' && (
-              <span className="text-xs text-red-700 bg-red-100 px-2 py-0.5 rounded-full">
-                Admin
-              </span>
-            )}
-          </div>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        setError(null)
+        create.mutate({ email, name, displayName })
+      }}
+      className="bg-white rounded-2xl shadow-card p-6 mb-6 space-y-4"
+    >
+      <h2 className="font-semibold text-ink">Nouvel opérateur</h2>
 
-          {/* L'identité réelle derrière le nom commercial : c'est sur elle que
-              porte la décision de validation, pas sur l'enseigne. */}
-          <p className="text-sm text-muted mt-1">
-            {operator.userName} — {operator.userEmail}
-          </p>
-          <p className="text-xs text-muted mt-1">
-            {operator.activityCount} activité(s) · demande du{' '}
-            {new Date(operator.requestedAt).toLocaleDateString('fr-FR')}
-          </p>
-        </div>
+      <div className="grid gap-4 md:grid-cols-3">
+        <label className="block">
+          <span className="text-sm text-muted">Nom commercial</span>
+          <input
+            required
+            maxLength={120}
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            placeholder="Blue Safari Mauritius"
+            className="mt-1 w-full h-11 px-3 rounded-xl border border-muted/30 focus:outline-none focus:ring-2 focus:ring-primary/40"
+          />
+        </label>
 
-        <div className="flex items-center gap-2">
-          {!isActive && (
-            <button
-              onClick={() =>
-                approve.mutate({ operatorId: operator.operatorId })
-              }
-              disabled={pending}
-              className="flex items-center gap-1.5 px-3 py-2 bg-primary text-white rounded-xl text-sm font-medium disabled:opacity-50"
-            >
-              {approve.isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Check className="w-4 h-4" />
-              )}
-              Valider
-            </button>
-          )}
+        <label className="block">
+          <span className="text-sm text-muted">Contact</span>
+          <input
+            required
+            maxLength={120}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Prénom Nom"
+            className="mt-1 w-full h-11 px-3 rounded-xl border border-muted/30 focus:outline-none focus:ring-2 focus:ring-primary/40"
+          />
+        </label>
 
-          {isActive && operator.role !== 'admin' && (
-            <button
-              onClick={() => {
-                if (
-                  confirm(
-                    `Révoquer « ${operator.displayName} » ? Ses activités en ligne seront archivées et son compte repassera touriste. Les réservations déjà prises restent honorées.`,
-                  )
-                ) {
-                  revoke.mutate({ operatorId: operator.operatorId })
-                }
-              }}
-              disabled={pending}
-              className="flex items-center gap-1.5 px-3 py-2 border border-red-200 text-red-600 rounded-xl text-sm font-medium hover:bg-red-50 disabled:opacity-50"
-            >
-              <ShieldOff className="w-4 h-4" />
-              Révoquer
-            </button>
-          )}
-        </div>
+        <label className="block">
+          <span className="text-sm text-muted">Email</span>
+          <input
+            required
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="contact@exemple.mu"
+            className="mt-1 w-full h-11 px-3 rounded-xl border border-muted/30 focus:outline-none focus:ring-2 focus:ring-primary/40"
+          />
+        </label>
       </div>
 
-      {error && <p className="text-red-500 text-sm mt-3">{error.message}</p>}
-    </div>
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      {/* Dit explicitement ce que la création ne fait pas : sans ça, l'admin
+          croit avoir ouvert un accès et l'opérateur ne peut pas se connecter. */}
+      <p className="text-xs text-muted">
+        Le compte est créé sans mot de passe. Son titulaire doit utiliser
+        « mot de passe oublié » pour en choisir un. Si l&apos;adresse existe
+        déjà, le compte est promu sans être modifié.
+      </p>
+
+      <button
+        type="submit"
+        disabled={create.isPending}
+        className="inline-flex items-center gap-2 bg-primary text-white font-semibold px-5 py-2.5 rounded-xl disabled:opacity-60"
+      >
+        {create.isPending ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : (
+          <Plus className="w-4 h-4" />
+        )}
+        Créer l&apos;opérateur
+      </button>
+    </form>
   )
 }
 
 export default function AdminOperatorsPage() {
   const trpc = useTRPC()
-  const { data, isLoading } = useQuery(
-    trpc.admin.operatorRequests.queryOptions(),
+  const queryClient = useQueryClient()
+  const { data: operators, isLoading } = useQuery(
+    trpc.admin.operators.queryOptions(),
   )
-
-  const waiting = data?.filter((o) => o.role === 'tourist') ?? []
-  const active = data?.filter((o) => o.role !== 'tourist') ?? []
 
   return (
     <div className="p-6 md:p-10 max-w-5xl mx-auto">
-      <header className="mb-8">
+      <header className="mb-6">
         <h1 className="font-body font-bold text-3xl text-ink">Opérateurs</h1>
         <p className="text-muted mt-1">
-          Valider une demande est le seul moyen d&apos;accorder le rôle
-          opérateur.
+          Les prestataires référencés sur la plateforme. Vous seul pouvez en
+          créer.
         </p>
       </header>
 
-      {isLoading ? (
-        <div className="space-y-4">
-          {[0, 1].map((i) => (
+      <CreateOperatorForm
+        onDone={() =>
+          queryClient.invalidateQueries({
+            queryKey: trpc.admin.operators.queryKey(),
+          })
+        }
+      />
+
+      {isLoading || !operators ? (
+        <div className="space-y-3">
+          {[0, 1, 2].map((i) => (
             <div
               key={i}
-              className="h-28 bg-white rounded-2xl shadow-card animate-pulse"
+              className="h-20 bg-white rounded-2xl shadow-card animate-pulse"
             />
           ))}
         </div>
+      ) : operators.length === 0 ? (
+        <div className="bg-white rounded-2xl shadow-card p-10 text-center">
+          <Store className="w-8 h-8 text-muted mx-auto mb-3" />
+          <p className="text-muted text-sm">
+            Aucun opérateur pour le moment.
+          </p>
+        </div>
       ) : (
-        <>
-          <h2 className="text-sm font-semibold text-muted uppercase tracking-widest mb-3">
-            Demandes en attente ({waiting.length})
-          </h2>
-          {waiting.length === 0 ? (
-            <div className="bg-white rounded-2xl shadow-card border border-muted/10 p-8 text-center mb-8">
-              <p className="text-muted text-sm">Aucune demande en attente.</p>
-            </div>
-          ) : (
-            <div className="space-y-4 mb-8">
-              {waiting.map((operator) => (
-                <OperatorRow key={operator.operatorId} operator={operator} />
-              ))}
-            </div>
-          )}
-
-          <h2 className="text-sm font-semibold text-muted uppercase tracking-widest mb-3">
-            Opérateurs actifs ({active.length})
-          </h2>
-          <div className="space-y-4">
-            {active.map((operator) => (
-              <OperatorRow key={operator.operatorId} operator={operator} />
-            ))}
-          </div>
-        </>
+        <ul className="space-y-3">
+          {operators.map((operator) => (
+            <li
+              key={operator.operatorId}
+              className="bg-white rounded-2xl shadow-card p-5 flex items-center justify-between gap-4"
+            >
+              <div className="min-w-0">
+                <p className="font-semibold text-ink truncate">
+                  {operator.displayName}
+                </p>
+                <p className="text-sm text-muted truncate">
+                  {operator.userName} · {operator.userEmail}
+                </p>
+              </div>
+              <span className="text-sm text-muted whitespace-nowrap">
+                {operator.activityCount} activité
+                {operator.activityCount > 1 ? 's' : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   )

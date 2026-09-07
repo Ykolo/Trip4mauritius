@@ -29,7 +29,7 @@ const STATUS_STYLES: Record<ActivityStatus, string> = {
 
 const STATUS_LABELS: Record<ActivityStatus, string> = {
   draft: 'Brouillon',
-  pending_moderation: 'En modération',
+  pending_moderation: 'En modération', // état hérité : plus personne ne l'écrit
   published: 'En ligne',
   rejected: 'Refusée',
   archived: 'Archivée',
@@ -54,7 +54,7 @@ function ActivityRow({ activity }: { activity: OperatorActivitySummary }) {
     })
 
   const submit = useMutation(
-    trpc.operator.submitForModeration.mutationOptions({ onSuccess: invalidate }),
+    trpc.operator.publishActivity.mutationOptions({ onSuccess: invalidate }),
   )
   const archive = useMutation(
     trpc.operator.archiveActivity.mutationOptions({ onSuccess: invalidate }),
@@ -121,7 +121,7 @@ function ActivityRow({ activity }: { activity: OperatorActivitySummary }) {
               ) : (
                 <Send className="w-4 h-4" />
               )}
-              Soumettre
+              Mettre en ligne
             </button>
           )}
 
@@ -187,7 +187,7 @@ export default function OperatorPlanningPage() {
             Mes activités
           </h1>
           <p className="text-muted mt-1">
-            Créez vos offres, programmez vos départs et suivez leur modération.
+            Créez vos offres, programmez vos départs et mettez-les en ligne.
           </p>
         </div>
         {!creating && (
@@ -225,7 +225,7 @@ export default function OperatorPlanningPage() {
             <p className="text-ink font-bold mb-2">Aucune activité</p>
             <p className="text-muted text-sm mb-6">
               Créez votre première offre. Elle restera en brouillon jusqu&apos;à
-              ce que vous la soumettiez à la modération.
+              ce que vous la mettiez en ligne.
             </p>
             <button
               onClick={() => setCreating(true)}

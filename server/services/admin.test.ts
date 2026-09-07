@@ -1,21 +1,21 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '@/lib/db'
-import {
-  approveOperator,
-  listActivitiesForModeration,
-  publishActivity,
-  rejectActivity,
-  revokeOperator,
-} from '@/server/services/admin'
+import { createOperator } from '@/server/services/admin'
 import { listActivities } from '@/server/services/activity'
 import {
   createActivity,
   createSlots,
-  requestOperatorAccess,
-  submitForModeration,
+  publishOwnActivity,
 } from '@/server/services/operator'
 import type { ActivityInput } from '@/lib/schemas/operator'
 import { testCategoryId } from '@/server/services/test-support'
+
+// Lot 1 : plus de modération, plus d'auto-inscription.
+//
+// Ce qui était vérifié ici — file d'attente, validation, révocation — n'existe
+// plus. Ce qui reste à prouver est plus étroit mais tout aussi sensible :
+// `createOperator` est désormais le SEUL chemin vers le rôle `operator`, et il
+// ne doit jamais devenir une fabrique d'administrateurs.
 
 const TEST_PREFIX = 'vitest-admin-'
 
@@ -38,13 +38,8 @@ async function cleanup() {
   await db.user.deleteMany({ where: { email: { startsWith: TEST_PREFIX } } })
 }
 
-async function makeCandidate(label: string) {
-  return db.user.create({
-    data: {
-      email: `${TEST_PREFIX}${label}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@example.test`,
-      name: `Candidat ${label}`,
-    },
-  })
+function testEmail(label: string) {
+  return `${TEST_PREFIX}${label}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@example.test`
 }
 
 async function activityInput(
@@ -70,168 +65,153 @@ function tomorrow(): string {
   return new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 }
 
-/** Opérateur validé, avec une activité soumise à la modération. */
-async function operatorWithSubmission() {
-  const user = await makeCandidate('op')
-  const profile = await requestOperatorAccess(user.id, 'Société de test')
-  await approveOperator(profile.id)
-
-  const activity = await createActivity(profile.id, await activityInput())
-  await createSlots(profile.id, activity.id, [
-    { date: tomorrow(), time: '09:00', maxSpots: 6 },
-  ])
-  await submitForModeration(profile.id, activity.id)
-
-  return { userId: user.id, operatorId: profile.id, activityId: activity.id }
-}
-
 beforeEach(cleanup)
 afterAll(cleanup)
 
-describe('validation des opérateurs', () => {
+describe('création d\'un opérateur', () => {
   it('est le seul chemin vers le rôle opérateur', async () => {
-    const user = await makeCandidate('a')
-    const profile = await requestOperatorAccess(user.id, 'Ma Société')
-
-    expect(
-      (await db.user.findUniqueOrThrow({ where: { id: user.id } })).role,
-    ).toBe('tourist')
-
-    await approveOperator(profile.id)
-
-    const after = await db.user.findUniqueOrThrow({ where: { id: user.id } })
-    expect(after.role).toBe('operator')
-    expect(
-      (await db.operator.findUniqueOrThrow({ where: { id: profile.id } }))
-        .verified,
-    ).toBe(true)
-  })
-
-  it('ne fabrique JAMAIS d\'administrateur', async () => {
-    const user = await makeCandidate('b')
-    const profile = await requestOperatorAccess(user.id, 'Ma Société')
-    await approveOperator(profile.id)
-
-    // Aucun service de ce lot ne doit pouvoir hisser un compte au rang d'admin :
-    // le premier admin vient du seed, et il n'existe pas de second chemin.
-    const after = await db.user.findUniqueOrThrow({ where: { id: user.id } })
-    expect(after.role).not.toBe('admin')
-  })
-
-  it('révoque : rétrograde, dévérifie et archive les activités en ligne', async () => {
-    const { operatorId, userId, activityId } = await operatorWithSubmission()
-    await publishActivity(activityId)
-
-    const before = await listActivities({ page: 1 })
-    expect(before.activities.some((a) => a.id === activityId)).toBe(true)
-
-    await revokeOperator(operatorId)
-
-    expect(
-      (await db.user.findUniqueOrThrow({ where: { id: userId } })).role,
-    ).toBe('tourist')
-    expect(
-      (await db.operator.findUniqueOrThrow({ where: { id: operatorId } }))
-        .verified,
-    ).toBe(false)
-
-    // Laisser les fiches en ligne viderait la révocation de son sens.
-    const activity = await db.activity.findUniqueOrThrow({
-      where: { id: activityId },
-    })
-    expect(activity.status).toBe('archived')
-
-    const after = await listActivities({ page: 1 })
-    expect(after.activities.some((a) => a.id === activityId)).toBe(false)
-  })
-
-  it('refuse de révoquer un administrateur', async () => {
-    const user = await makeCandidate('admin')
-    const profile = await requestOperatorAccess(user.id, 'Admin Société')
-    await db.user.update({ where: { id: user.id }, data: { role: 'admin' } })
-
-    await expect(revokeOperator(profile.id)).rejects.toMatchObject({
-      code: 'FORBIDDEN',
+    const email = testEmail('neuf')
+    const { operatorId, userCreated } = await createOperator({
+      email,
+      name: 'Contact Neuf',
+      displayName: 'Société Neuve',
     })
 
-    expect(
-      (await db.user.findUniqueOrThrow({ where: { id: user.id } })).role,
-    ).toBe('admin')
+    expect(userCreated).toBe(true)
+
+    const user = await db.user.findUnique({
+      where: { email },
+      include: { operator: true },
+    })
+    expect(user?.role).toBe('operator')
+    expect(user?.operator?.id).toBe(operatorId)
+  })
+
+  it('crée un compte SANS mot de passe', async () => {
+    // Fabriquer un mot de passe ici obligerait à le transmettre en clair. Le
+    // titulaire passe par « mot de passe oublié » — encore faut-il qu'aucune
+    // ligne `account` ne soit écrite, sinon la connexion serait possible avec
+    // une valeur que personne n'a choisie.
+    const email = testEmail('sans-mdp')
+    await createOperator({
+      email,
+      name: 'Contact',
+      displayName: 'Sans Mot De Passe',
+    })
+
+    const user = await db.user.findUnique({
+      where: { email },
+      include: { accounts: true },
+    })
+    expect(user?.accounts).toHaveLength(0)
+  })
+
+  it('promeut un compte existant sans écraser ses données', async () => {
+    const email = testEmail('touriste')
+    const existing = await db.user.create({
+      data: { email, name: 'Touriste Fidèle', role: 'tourist' },
+    })
+
+    const { userCreated } = await createOperator({
+      email,
+      name: 'Nom Ignoré',
+      displayName: 'Sa Société',
+    })
+
+    expect(userCreated).toBe(false)
+
+    const after = await db.user.findUnique({ where: { id: existing.id } })
+    expect(after?.role).toBe('operator')
+    // Le nom du compte appartient à son titulaire : la création d'opérateur
+    // renseigne un nom commercial, elle ne réécrit pas l'identité.
+    expect(after?.name).toBe('Touriste Fidèle')
+  })
+
+  it('ne fabrique JAMAIS d\'administrateur et n\'en rétrograde aucun', async () => {
+    const email = testEmail('admin')
+    const admin = await db.user.create({
+      data: { email, name: 'Admin', role: 'admin' },
+    })
+
+    await createOperator({
+      email,
+      name: 'Admin',
+      displayName: 'Société de l\'admin',
+    })
+
+    const after = await db.user.findUnique({ where: { id: admin.id } })
+    // Ni promu au-dessus, ni rétrogradé en dessous.
+    expect(after?.role).toBe('admin')
+  })
+
+  it('refuse un compte déjà opérateur', async () => {
+    const email = testEmail('doublon')
+    await createOperator({
+      email,
+      name: 'Contact',
+      displayName: 'Première Société',
+    })
+
+    await expect(
+      createOperator({
+        email,
+        name: 'Contact',
+        displayName: 'Deuxième Société',
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' })
   })
 })
 
-describe('modération des activités', () => {
-  it('publie une activité soumise et la fait apparaître au catalogue', async () => {
-    const { activityId } = await operatorWithSubmission()
-
-    const queue = await listActivitiesForModeration('pending_moderation')
-    expect(queue.some((a) => a.id === activityId)).toBe(true)
-
-    await publishActivity(activityId)
-
-    const listed = await listActivities({ page: 1 })
-    expect(listed.activities.some((a) => a.id === activityId)).toBe(true)
-  })
-
-  it('refuse de publier une activité sans créneau à venir', async () => {
-    const { operatorId, activityId } = await operatorWithSubmission()
-
-    // On vide le planning : la fiche serait indexée mais irréservable.
-    await db.activitySlot.deleteMany({ where: { activityId } })
-
-    await expect(publishActivity(activityId)).rejects.toMatchObject({
-      code: 'BAD_REQUEST',
+describe('mise en ligne sans modération', () => {
+  async function operatorWithDraft() {
+    const { operatorId } = await createOperator({
+      email: testEmail('op'),
+      name: 'Contact',
+      displayName: 'Société de test',
     })
-    expect(
-      (await db.activity.findUniqueOrThrow({ where: { id: activityId } }))
-        .status,
-    ).toBe('pending_moderation')
 
-    // Et l'opérateur est bien celui qui possède l'activité — garde-fou du test.
-    expect(
-      await db.activity.count({ where: { id: activityId, operatorId } }),
-    ).toBe(1)
-  })
+    const activity = await createActivity(operatorId, await activityInput())
+    return { operatorId, activityId: activity.id }
+  }
 
-  it('résiste à deux administrateurs qui traitent la même activité', async () => {
-    const { activityId } = await operatorWithSubmission()
-
-    const results = await Promise.allSettled([
-      publishActivity(activityId),
-      rejectActivity(activityId),
+  it('publie directement, sans passer par une file d\'attente', async () => {
+    const { operatorId, activityId } = await operatorWithDraft()
+    await createSlots(operatorId, activityId, [
+      { date: tomorrow(), time: '09:00', maxSpots: 6 },
     ])
 
-    // Un seul verdict s'applique : sans la transition conditionnée sur le
-    // statut lu, le second écraserait la décision du premier.
-    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1)
+    const result = await publishOwnActivity(operatorId, activityId)
 
-    const final = await db.activity.findUniqueOrThrow({
-      where: { id: activityId },
-    })
-    expect(['published', 'rejected']).toContain(final.status)
+    // C'est le cœur du lot 1 : plus d'état intermédiaire.
+    expect(result.status).toBe('published')
+
+    const { activities } = await listActivities({ page: 1 })
+    expect(activities.some((a) => a.id === activityId)).toBe(true)
   })
 
-  it('dépublie une activité en ligne et la sort du catalogue', async () => {
-    const { activityId } = await operatorWithSubmission()
-    await publishActivity(activityId)
+  it('refuse de mettre en ligne une activité sans créneau à venir', async () => {
+    // Le seul contrôle qui survit à la suppression de la modération : une fiche
+    // publiée sans départ est indexée par les moteurs et réservable par
+    // personne.
+    const { operatorId, activityId } = await operatorWithDraft()
 
-    await rejectActivity(activityId)
+    await expect(
+      publishOwnActivity(operatorId, activityId),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
 
-    const listed = await listActivities({ page: 1 })
-    expect(listed.activities.some((a) => a.id === activityId)).toBe(false)
+    const { activities } = await listActivities({ page: 1 })
+    expect(activities.some((a) => a.id === activityId)).toBe(false)
   })
 
-  it('ne laisse pas les brouillons entrer dans une file de modération', async () => {
-    const user = await makeCandidate('draft')
-    const profile = await requestOperatorAccess(user.id, 'Brouillonneur')
-    await approveOperator(profile.id)
-    const draft = await createActivity(profile.id, await activityInput())
+  it('ne remet pas en ligne une activité déjà publiée', async () => {
+    const { operatorId, activityId } = await operatorWithDraft()
+    await createSlots(operatorId, activityId, [
+      { date: tomorrow(), time: '09:00', maxSpots: 6 },
+    ])
+    await publishOwnActivity(operatorId, activityId)
 
-    // Un brouillon appartient à son opérateur tant qu'il ne l'a pas soumis :
-    // il ne doit apparaître dans aucune des files que l'admin peut ouvrir.
-    for (const status of ['pending_moderation', 'published', 'rejected'] as const) {
-      const queue = await listActivitiesForModeration(status)
-      expect(queue.some((a) => a.id === draft.id)).toBe(false)
-    }
+    await expect(
+      publishOwnActivity(operatorId, activityId),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
   })
 })

@@ -17,6 +17,9 @@
 //   3. `.use(withFeature('ma.cle'))` sur les procédures concernées, dès que le
 //      flag protège autre chose que de l'affichage.
 //
+// Les interrupteurs ne sont manœuvrables que par le SUPER ADMIN (Kled), pas par
+// l'administrateur Trip4mauritius : voir `superAdminProcedure`.
+//
 // Deux choses qu'un flag ne doit jamais faire : conditionner une migration (une
 // colonne ajoutée reste ajoutée, la bascule ne reviendrait pas en arrière), et
 // se disséminer dans les composants feuilles — on flague une frontière (une
@@ -41,13 +44,6 @@ export interface FeatureDefinition {
 }
 
 export const FEATURES = {
-  'operator.selfSignup': {
-    label: 'Inscription autonome des opérateurs',
-    description:
-      "Laisse un touriste connecté demander un accès opérateur depuis /operator/dashboard. Désactivé, le formulaire disparaît et la procédure refuse : les profils opérateur ne peuvent plus être créés que par un admin.",
-    default: true,
-    expiresOn: '2027-03-31',
-  },
   'currency.selector': {
     label: 'Sélecteur de devise',
     description:
@@ -83,7 +79,7 @@ export function isFeatureKey(value: string): value is FeatureKey {
   return Object.hasOwn(FEATURES, value)
 }
 
-/** `operator.selfSignup` → `FEATURE_OPERATOR_SELF_SIGNUP`. */
+/** `whatsapp.contact` → `FEATURE_WHATSAPP_CONTACT`. */
 export function featureEnvVar(key: FeatureKey): string {
   return `FEATURE_${key
     .replace(/([a-z0-9])([A-Z])/g, '$1_$2')

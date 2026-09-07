@@ -5,7 +5,6 @@ import {
   activityInputSchema,
   operatorBookingsSchema,
   operatorProfileSchema,
-  requestAccessSchema,
   updateActivitySchema,
 } from '@/lib/schemas/operator'
 import {
@@ -19,8 +18,7 @@ import {
   listOperatorActivities,
   listOperatorBookings,
   listUpcomingDepartures,
-  requestOperatorAccess,
-  submitForModeration,
+  publishOwnActivity,
   updateActivity,
   updateOperatorProfile,
 } from '@/server/services/operator'
@@ -28,7 +26,6 @@ import {
   createTRPCRouter,
   operatorProcedure,
   protectedProcedure,
-  withFeature,
 } from '@/server/trpc/init'
 
 // Router mince : valider, autoriser, déléguer.
@@ -48,15 +45,10 @@ export const operatorRouter = createTRPCRouter({
     getMyOperatorProfile(ctx.user.id),
   ),
 
-  // Fermée quand `operator.selfSignup` est éteint. Le formulaire disparaît
-  // aussi côté écran, mais c'est CE garde-fou qui compte : cacher un bouton ne
-  // rend pas la mutation inappelable.
-  requestAccess: protectedProcedure
-    .use(withFeature('operator.selfSignup'))
-    .input(requestAccessSchema)
-    .mutation(({ ctx, input }) =>
-      requestOperatorAccess(ctx.user.id, input.displayName),
-    ),
+  // `requestAccess` a disparu au lot 1 : un touriste ne se déclare plus
+  // prestataire. Seul `admin.createOperator` mène au rôle `operator`, et il est
+  // en `adminProcedure` — c'est Trip4mauritius qui décide qui vend sur sa
+  // plateforme.
 
   // ── Réservé aux opérateurs ─────────────────────────────────────────────
   stats: operatorProcedure.query(({ ctx }) => getOperatorStats(ctx.operator.id)),
@@ -91,10 +83,10 @@ export const operatorRouter = createTRPCRouter({
       updateActivity(ctx.operator.id, input.activityId, input.data),
     ),
 
-  submitForModeration: operatorProcedure
+  publishActivity: operatorProcedure
     .input(activityIdSchema)
     .mutation(({ ctx, input }) =>
-      submitForModeration(ctx.operator.id, input.activityId),
+      publishOwnActivity(ctx.operator.id, input.activityId),
     ),
 
   archiveActivity: operatorProcedure

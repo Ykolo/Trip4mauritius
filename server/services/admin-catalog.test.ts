@@ -131,9 +131,10 @@ describe('création', () => {
 
 describe('édition', () => {
   it("ne renvoie PAS une fiche publiée en modération", async () => {
-    // C'est l'écart n°2 avec l'espace opérateur. Si quelqu'un aligne un jour ce
-    // service sur `operator.ts`, la moindre correction de faute de frappe
-    // sortirait la fiche du catalogue.
+    // La correction d'une faute de frappe ne doit jamais sortir une fiche du
+    // catalogue. C'était un écart assumé avec l'espace opérateur ; depuis la
+    // suppression de la modération au lot 1, les deux services suivent la même
+    // règle — voir le test suivant.
     const operator = await makeOperator('b')
     const { activity } = await publishedActivity(operator.id)
 
@@ -147,9 +148,11 @@ describe('édition', () => {
     expect(detail.title).toBe('Titre corrigé')
   })
 
-  it("là où l'espace opérateur, lui, la renvoie bien en modération", async () => {
-    // Le contraste est le sujet du test : les deux comportements doivent
-    // coexister, pas converger.
+  it("comme l'espace opérateur, qui ne l'en sort plus non plus", async () => {
+    // Ce test vérifiait l'inverse : l'opérateur renvoyait sa fiche en
+    // `pending_moderation`. Sans file d'attente, cette règle retirait la fiche
+    // du catalogue sans que rien ne l'y ramène — l'opérateur se sabordait en
+    // corrigeant son propre texte.
     const operator = await makeOperator('c')
     const { activity } = await publishedActivity(operator.id)
 
@@ -159,7 +162,7 @@ describe('édition', () => {
       await activityInput(),
     )
 
-    expect(detail.status).toBe('pending_moderation')
+    expect(detail.status).toBe('published')
   })
 })
 
