@@ -1,5 +1,6 @@
 import { activityFiltersSchema } from '@/lib/schemas/activity'
 import { listActivities } from '@/server/services/activity'
+import { listPublishedGuides } from '@/server/services/guide'
 import { HomeClient } from './HomeClient'
 
 // Composant SERVEUR, comme `/activities` et `/activities/[slug]`.
@@ -16,12 +17,22 @@ import { HomeClient } from './HomeClient'
 
 /** Ce que la bande horizontale peut montrer sans devenir un second catalogue. */
 const FEATURED_COUNT = 6
+/** Idem pour les guides : l'accueil renvoie vers /guide, il ne le remplace pas. */
+const GUIDES_COUNT = 4
 
 export default async function HomePage() {
   // `listActivities` ne renvoie que les activités publiées et trie par note
   // décroissante : les six premières font une sélection acceptable sans
   // introduire de notion de « mise en avant » en base.
-  const { activities } = await listActivities(activityFiltersSchema.parse({}))
+  const [{ activities }, guides] = await Promise.all([
+    listActivities(activityFiltersSchema.parse({})),
+    listPublishedGuides(),
+  ])
 
-  return <HomeClient featured={activities.slice(0, FEATURED_COUNT)} />
+  return (
+    <HomeClient
+      featured={activities.slice(0, FEATURED_COUNT)}
+      guides={guides.slice(0, GUIDES_COUNT)}
+    />
+  )
 }

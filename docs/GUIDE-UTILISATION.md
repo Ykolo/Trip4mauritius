@@ -4,13 +4,14 @@ Comment se servir du site, rôle par rôle. Pour l'architecture et les choix tec
 
 ---
 
-## Les trois rôles
+## Les quatre rôles
 
 | Rôle | Ce qu'il fait | Comment on l'obtient |
 |---|---|---|
 | **Touriste** | Cherche des activités, réserve, annule | À l'inscription — **tout le monde s'inscrit touriste** |
-| **Opérateur** | Publie des activités, gère ses créneaux, voit ses passagers | Demande d'accès, **validée par un admin** |
-| **Admin** | Saisit et modère le catalogue, valide et révoque les opérateurs | **Uniquement par le seed** — aucun écran ne fabrique d'admin |
+| **Opérateur** | Publie des activités, gère ses créneaux, voit ses passagers | **Créé par l'admin Trip4mauritius** — il n'y a pas d'auto-inscription |
+| **Admin** | Tient le catalogue, les réservations, les opérateurs, les guides | **Uniquement par le seed** — aucun écran ne fabrique d'admin |
+| **Super admin** | Kled, le prestataire : manœuvre les interrupteurs de fonctionnalité | **Uniquement par le seed** |
 
 Le formulaire d'inscription ne propose aucun choix de rôle, et c'est délibéré : pouvoir s'inscrire directement admin serait une faille.
 
@@ -22,7 +23,8 @@ Le seed crée des comptes **connectables**, tous avec le même mot de passe :
 
 | Compte | Rôle | Sert à |
 |---|---|---|
-| `admin@mauriexplore.mu` | admin | Modération, validation des opérateurs, interrupteurs |
+| `admin@mauriexplore.mu` | admin | Catalogue, réservations, opérateurs, catégories, guides |
+| `kled@kledpro.tech` | superadmin | Les interrupteurs, hors de portée de l'admin client |
 | `contact@blue-safari.mu` et les 3 autres | operator | Gérer les activités déjà publiées |
 | `tourist@example.com` | tourist | Exercer le tunnel de réservation |
 
@@ -32,7 +34,7 @@ Le mot de passe des six comptes est **`AdminTrip4Mauritius`**. Il est écrit en 
 
 Relancer le seed réécrit ces mots de passe ; il ne touche à aucun autre compte.
 
-> **Le rôle voyage dans la session, mise en cache 5 minutes.** Après toute promotion (validation d'un opérateur, par exemple), il faut **se déconnecter et se reconnecter** pour que le nouveau rôle prenne effet.
+> **Le rôle voyage dans la session, mise en cache 5 minutes.** Après toute promotion (la création d'un opérateur, par exemple), il faut **se déconnecter et se reconnecter** pour que le nouveau rôle prenne effet.
 
 ---
 
@@ -83,10 +85,13 @@ Exemple : 100 € par personne × 2 participants ⇒ **200 € au total**, dont 
 
 ### Devenir opérateur
 
-1. Créez un compte touriste, puis allez sur `/operator/dashboard`.
-2. Un formulaire vous demande votre **nom commercial** — celui que verront les touristes sur vos fiches.
-3. Envoyez la demande. Elle apparaît chez les admins.
-4. Après validation, **déconnectez-vous et reconnectez-vous** : sans cela votre nouveau rôle ne prend pas effet avant l'expiration du cache de session.
+**On ne se déclare pas opérateur soi-même.** C'est Trip4mauritius qui ouvre le compte, depuis `/admin/operators` : la plateforme choisit qui vend chez elle.
+
+1. Contactez l'équipe pour être référencé.
+2. Elle crée votre compte à partir de votre email. Vous ne recevez **aucun mot de passe** : utilisez « mot de passe oublié » sur l'écran de connexion pour en choisir un.
+3. Une fois connecté, `/operator/dashboard` vous est ouvert.
+
+> Si vous voyez « Espace réservé aux opérateurs partenaires », c'est que votre compte n'a pas encore été créé comme opérateur.
 
 ### Publier une activité
 
@@ -108,21 +113,18 @@ Sur la ligne de l'activité, dépliez le panneau (chevron) pour gérer les crén
 
 ### Mettre en ligne
 
-**Soumettre** envoie l'activité à la modération. Deux conditions :
+**Mettre en ligne** publie l'activité **directement** : il n'y a pas de file de modération, Trip4mauritius tient son catalogue. Une seule condition subsiste, et elle est de fond :
 
-- au moins **un créneau à venir** — publier une fiche irréservable n'a pas de sens ;
-- l'activité doit être en brouillon ou avoir été refusée.
+- au moins **un créneau à venir** — une fiche indexée que personne ne peut réserver ne rend service à personne.
 
-Un admin publie ou refuse. Une activité **refusée peut être corrigée et resoumise**.
-
-> **Modifier une activité déjà en ligne la renvoie en modération.** Sans cette règle, on ferait valider un texte anodin puis on le remplacerait une fois publié.
+> **Corriger une activité en ligne ne la retire PAS du catalogue.** L'édition renvoyait autrefois la fiche en modération ; sans file d'attente, cette règle la faisait disparaître sans que rien ne l'y ramène — on se sabordait en corrigeant sa propre faute de frappe. Le contrôle se fait après coup : Trip4mauritius voit tout le catalogue et peut dépublier depuis `/admin/activities`.
 
 ### Suivre l'activité
 
 - **`/operator/dashboard`** — chiffre d'affaires, nombre de réservations, taux de remplissage sur les départs à venir, et la liste des prochains départs réservés.
 - **`/operator/bookings`** — vos passagers : nom, **téléphone**, référence, nombre de places et **solde à encaisser sur place**. Le numéro affiché est celui donné pour *ce* départ, pas celui du profil du client.
 - **`/operator/wallet`** — relevé en lecture seule (voir *Limites*).
-- **`/operator/settings`** — nom commercial, logo, et état de votre vérification.
+- **`/operator/settings`** — nom commercial et logo.
 
 ### Retirer une activité
 
@@ -140,12 +142,12 @@ Ce qui attend une décision — activités à modérer, demandes d'opérateur �
 
 ### Saisir et corriger le catalogue
 
-`/admin/activities` est l'écran où **vous** remplissez le catalogue, pour n'importe quel opérateur. C'est ce dont la plateforme a besoin au lancement, quand aucun prestataire n'est encore autonome. À ne pas confondre avec la modération, qui traite ce que les opérateurs *soumettent*.
+`/admin/activities` est l'écran où **vous** remplissez le catalogue, pour n'importe quel opérateur. C'est ce dont la plateforme a besoin au lancement, quand aucun prestataire n'est encore autonome.
 
 - **Nouvelle activité** — choisissez d'abord **pour quel opérateur** : une fiche appartient toujours à quelqu'un, et c'est lui qui verra ses départs et ses passagers. Les opérateurs non encore vérifiés sont proposés, signalés comme tels.
 - La fiche est créée **en brouillon**. Dépliez-la (chevron) pour lui ajouter des créneaux : **sans départ à venir, la mise en ligne est refusée** — une page indexée que personne ne peut réserver ne rend service à personne.
-- **Modifier** une fiche déjà en ligne la corrige **sans la sortir du catalogue**. Un opérateur, lui, repasse en modération à chaque édition : c'est voulu, vous êtes la modération.
-- **Retirer** repasse la fiche en brouillon — pas en « refusée » : refuser est un verdict adressé à un opérateur, retirer est un geste d'édition.
+- **Modifier** une fiche déjà en ligne la corrige **sans la sortir du catalogue** — et l'espace opérateur suit désormais la même règle.
+- **Retirer** repasse la fiche en brouillon.
 - **Archiver** la sort du catalogue en conservant les réservations passées. Une activité ne se supprime jamais.
 - Le **sélecteur d'opérateur** et la recherche (titre, adresse, opérateur) servent à reprendre un catalogue prestataire par prestataire.
 
@@ -166,13 +168,27 @@ Les brouillons n'apparaissent dans aucune file : tant qu'un opérateur n'a pas s
 - La recherche accepte indifféremment une **référence** (`MX-2026-000123`), un **nom** ou un **email**.
 - L'écran s'ouvre sur les départs **à venir**, les plus proches d'abord — les seuls sur lesquels il reste quelque chose à faire.
 
-### Consulter les comptes
+### Créer les opérateurs
 
-`/admin/users` : qui s'est inscrit, avec quel rôle, combien de réservations. **En lecture seule.** Les rôles se changent depuis *Opérateurs*, et aucun écran ne sait fabriquer un admin.
+`/admin/operators` liste les prestataires et permet d'en **créer**. C'est le seul chemin vers le rôle opérateur : un touriste ne peut plus se déclarer prestataire lui-même.
 
-### Valider et révoquer les opérateurs
+Renseignez le nom commercial, le contact et l'email. Deux cas :
 
-`/admin/operators` sépare les **demandes en attente** des **opérateurs actifs**, avec l'identité réelle derrière chaque nom commercial — c'est sur elle que porte la décision.
+- **adresse inconnue** → le compte est créé **sans mot de passe**. Son titulaire doit passer par « mot de passe oublié » pour en choisir un — nous n'en fabriquons pas, il faudrait vous le faire transmettre en clair ;
+- **adresse déjà connue** → le compte est promu, ses données ne sont pas réécrites.
+
+Un compte administrateur n'est jamais rétrogradé par cette porte.
+
+> Il n'y a **pas d'écran de gestion de comptes** au lot 1, et aucun écran ne sait fabriquer un administrateur : le premier vient du seed.
+
+### Rédiger les guides
+
+`/admin/guides` réunit les **articles** et leur **classification** — gastronomie, sécurité, stationnement… Créez d'abord une catégorie, puis l'article : titre, chapô, corps en Markdown, images en URL.
+
+- Le **chapô** est l'accroche affichée dans les listes. Il est séparé du corps parce qu'en extraire les premières lignes produirait une phrase coupée.
+- L'article part en **brouillon** ; cochez *Publier* pour le mettre en ligne. Un brouillon n'est jamais visible publiquement.
+- **L'adresse ne bouge pas** quand vous corrigez un titre : elle vit dans les liens partagés.
+- Une catégorie se **désactive**, elle ne se supprime pas — les articles qu'elle classe doivent survivre.
 
 - **Valider** accorde le badge vérifié **et** le rôle opérateur. C'est le seul chemin vers ce rôle.
 - **Révoquer** retire le badge, repasse le compte en touriste, et **archive toutes ses activités en ligne**. Laisser les fiches en place viderait la révocation de son sens. Les réservations déjà prises restent honorées.
@@ -233,5 +249,6 @@ Ce qui n'est pas encore en place. Ce sont des choix assumés à ce stade, pas de
 | `/cart` | tout le monde | Panier (navigateur) |
 | `/checkout` | connecté | Tunnel de réservation |
 | `/bookings` · `/account` | connecté | Réservations et profil |
-| `/operator/*` | opérateur validé | Activités, créneaux, passagers, relevé |
-| `/admin/*` | admin | Catalogue, modération, réservations, opérateurs, comptes, catégories, interrupteurs |
+| `/operator/*` | opérateur | Activités, créneaux, passagers, relevé |
+| `/admin/*` | admin | Catalogue, réservations, opérateurs, catégories, guides |
+| `/admin/features` | super admin (Kled) | Interrupteurs de fonctionnalité — hors de portée de l'admin client |

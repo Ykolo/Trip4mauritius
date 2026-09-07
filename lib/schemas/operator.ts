@@ -86,9 +86,7 @@ export const operatorProfileSchema = z.object({
   avatarUrl: z.string().trim().url().or(z.literal('')).optional(),
 })
 
-export const requestAccessSchema = z.object({
-  displayName: z.string().trim().min(2).max(80),
-})
+
 
 export const operatorBookingsSchema = z.object({
   page: z.number().int().min(1).default(1),
