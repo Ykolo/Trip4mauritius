@@ -10,7 +10,7 @@ Comment se servir du site, rôle par rôle. Pour l'architecture et les choix tec
 |---|---|---|
 | **Touriste** | Cherche des activités, réserve, annule | À l'inscription — **tout le monde s'inscrit touriste** |
 | **Opérateur** | Publie des activités, gère ses créneaux, voit ses passagers | Demande d'accès, **validée par un admin** |
-| **Admin** | Modère les activités, valide et révoque les opérateurs | **Uniquement par le seed** — aucun écran ne fabrique d'admin |
+| **Admin** | Saisit et modère le catalogue, valide et révoque les opérateurs | **Uniquement par le seed** — aucun écran ne fabrique d'admin |
 
 Le formulaire d'inscription ne propose aucun choix de rôle, et c'est délibéré : pouvoir s'inscrire directement admin serait une faille.
 
@@ -136,6 +136,17 @@ Accès par `/admin`, ou depuis `/account` (le raccourci n'apparaît qu'aux admin
 
 Ce qui attend une décision — activités à modérer, demandes d'opérateur — et l'état de la place de marché. Les onglets portent une **pastille** avec le nombre en attente, pour qu'une demande ne dorme pas faute d'avoir pensé à ouvrir l'écran.
 
+### Saisir et corriger le catalogue
+
+`/admin/activities` est l'écran où **vous** remplissez le catalogue, pour n'importe quel opérateur. C'est ce dont la plateforme a besoin au lancement, quand aucun prestataire n'est encore autonome. À ne pas confondre avec la modération, qui traite ce que les opérateurs *soumettent*.
+
+- **Nouvelle activité** — choisissez d'abord **pour quel opérateur** : une fiche appartient toujours à quelqu'un, et c'est lui qui verra ses départs et ses passagers. Les opérateurs non encore vérifiés sont proposés, signalés comme tels.
+- La fiche est créée **en brouillon**. Dépliez-la (chevron) pour lui ajouter des créneaux : **sans départ à venir, la mise en ligne est refusée** — une page indexée que personne ne peut réserver ne rend service à personne.
+- **Modifier** une fiche déjà en ligne la corrige **sans la sortir du catalogue**. Un opérateur, lui, repasse en modération à chaque édition : c'est voulu, vous êtes la modération.
+- **Retirer** repasse la fiche en brouillon — pas en « refusée » : refuser est un verdict adressé à un opérateur, retirer est un geste d'édition.
+- **Archiver** la sort du catalogue en conservant les réservations passées. Une activité ne se supprime jamais.
+- Le **sélecteur d'opérateur** et la recherche (titre, adresse, opérateur) servent à reprendre un catalogue prestataire par prestataire.
+
 ### Modérer les activités
 
 `/admin/moderation`, quatre files : **À modérer**, **En ligne**, **Refusées**, **Archivées**. Les plus anciennes soumissions d'abord — une file qui sert les dernières arrivées laisserait indéfiniment de côté les opérateurs les moins chanceux.
@@ -221,4 +232,4 @@ Ce qui n'est pas encore en place. Ce sont des choix assumés à ce stade, pas de
 | `/checkout` | connecté | Tunnel de réservation |
 | `/bookings` · `/account` | connecté | Réservations et profil |
 | `/operator/*` | opérateur validé | Activités, créneaux, passagers, relevé |
-| `/admin/*` | admin | Modération, réservations, opérateurs, comptes, catégories, interrupteurs |
+| `/admin/*` | admin | Catalogue, modération, réservations, opérateurs, comptes, catégories, interrupteurs |

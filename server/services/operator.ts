@@ -7,6 +7,10 @@ import {
 } from '@/lib/datetime'
 import type { ActivityInput, SlotInput } from '@/lib/schemas/operator'
 import {
+  toActivityWriteData,
+  uniqueSlug,
+} from '@/server/services/activity-write'
+import {
   toOperatorActivityDetail,
   toOperatorActivitySummary,
   toOperatorBookingRow,
@@ -30,40 +34,6 @@ import type {
 // une vérification post-lecture aurait déjà chargé la donnée d'autrui.
 
 const BOOKINGS_PER_PAGE = 20
-
-/** Slug URL à partir du titre : minuscules, sans accents ni ponctuation. */
-function slugify(title: string): string {
-  return title
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80)
-}
-
-/**
- * Slug unique.
- *
- * `slug` est en UNIQUE : deux opérateurs qui nomment leur sortie « Catamaran
- * Nord » se heurteraient sur une erreur Prisma incompréhensible. On suffixe
- * jusqu'à trouver libre. La boucle est bornée — au-delà, un aléa vaut mieux
- * qu'un blocage.
- */
-async function uniqueSlug(title: string): Promise<string> {
-  const base = slugify(title) || 'activite'
-
-  for (let attempt = 0; attempt < 10; attempt++) {
-    const candidate = attempt === 0 ? base : `${base}-${attempt + 1}`
-    const taken = await db.activity.findUnique({
-      where: { slug: candidate },
-      select: { id: true },
-    })
-    if (!taken) return candidate
-  }
-
-  return `${base}-${Math.random().toString(36).slice(2, 8)}`
-}
 
 /** Charge une activité en garantissant qu'elle appartient à cet opérateur. */
 async function ownedActivity(operatorId: string, activityId: string) {
@@ -252,19 +222,9 @@ export async function createActivity(
 ): Promise<OperatorActivityDetail> {
   const activity = await db.activity.create({
     data: {
+      ...toActivityWriteData(input),
       operatorId,
       slug: await uniqueSlug(input.title),
-      title: input.title,
-      categoryId: input.categoryId,
-      region: input.region,
-      duration: input.duration,
-      priceHt: input.priceHT,
-      maxParticipants: input.maxParticipants,
-      languages: input.languages,
-      imageUrls: input.imageUrls,
-      included: input.included,
-      excluded: input.excluded,
-      description: input.description,
       // TOUJOURS en brouillon. Le statut n'est pas dans l'input : une activité
       // ne peut atteindre le catalogue que par la modération (lot 8).
       status: 'draft',
@@ -295,17 +255,7 @@ export async function updateActivity(
   await db.activity.update({
     where: { id: activityId },
     data: {
-      title: input.title,
-      categoryId: input.categoryId,
-      region: input.region,
-      duration: input.duration,
-      priceHt: input.priceHT,
-      maxParticipants: input.maxParticipants,
-      languages: input.languages,
-      imageUrls: input.imageUrls,
-      included: input.included,
-      excluded: input.excluded,
-      description: input.description,
+      ...toActivityWriteData(input),
       status,
     },
   })

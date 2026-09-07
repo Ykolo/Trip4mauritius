@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import {
   LayoutDashboard,
+  MapPin,
   ShieldCheck,
   Store,
   Tags,
@@ -17,6 +18,7 @@ import { useTRPC } from '@/lib/trpc/client'
 
 const TABS = [
   { href: '/admin', label: "Vue d'ensemble", icon: LayoutDashboard },
+  { href: '/admin/activities', label: 'Catalogue', icon: MapPin },
   { href: '/admin/moderation', label: 'Modération', icon: ShieldCheck },
   { href: '/admin/bookings', label: 'Réservations', icon: Ticket },
   { href: '/admin/operators', label: 'Opérateurs', icon: Store },

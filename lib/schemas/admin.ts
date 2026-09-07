@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { FEATURE_KEYS, type FeatureKey } from '@/lib/features'
+import { activityInputSchema } from '@/lib/schemas/operator'
 
 // Aucun schéma ne porte de `role` : la promotion est décidée par la procédure
 // appelée (`approveOperator`), jamais par une valeur venue de la requête. Un
@@ -70,6 +71,61 @@ export const adminUsersSchema = z.object({
 
 export type AdminBookingsInput = z.infer<typeof adminBookingsSchema>
 export type AdminUsersInput = z.infer<typeof adminUsersSchema>
+
+// Catalogue.
+//
+// On RÉUTILISE `activityInputSchema` de l'espace opérateur : c'est la même
+// entité, validée par les mêmes bornes. Un second schéma « admin » aurait
+// autorisé, au premier assouplissement, une fiche que l'opérateur ne peut pas
+// rouvrir dans son propre formulaire.
+//
+// `operatorId` est ici EXPLICITE, contrairement au schéma opérateur qui
+// l'interdit : un admin publie forcément pour le compte de quelqu'un, et rien
+// dans son contexte de session ne dit pour qui. C'est un choix, donc une entrée.
+
+export const adminActivitiesSchema = z.object({
+  page,
+  search,
+  status: z
+    .enum([
+      'all',
+      'draft',
+      'pending_moderation',
+      'published',
+      'rejected',
+      'archived',
+    ])
+    .default('all'),
+  operatorId: z.string().trim().min(1).optional(),
+})
+
+export const adminCreateActivitySchema = z.object({
+  operatorId: z.string().min(1),
+  data: activityInputSchema,
+})
+
+export const adminUpdateActivitySchema = z.object({
+  activityId: z.string().min(1),
+  data: activityInputSchema,
+})
+
+/**
+ * Les seuls statuts qu'un admin pose à la main.
+ *
+ * `pending_moderation` et `rejected` en sont absents : ce sont les états de la
+ * file de modération, produits par la soumission d'un opérateur et par
+ * `rejectActivity`. Les rendre posables ici donnerait deux chemins vers le même
+ * état, dont un sans la garde de concurrence de la file.
+ */
+export const adminActivityStatusSchema = z.object({
+  activityId: z.string().min(1),
+  status: z.enum(['draft', 'published', 'archived']),
+})
+
+export type AdminActivitiesInput = z.infer<typeof adminActivitiesSchema>
+export type AdminActivityStatus = z.infer<
+  typeof adminActivityStatusSchema
+>['status']
 
 // Catégories.
 //

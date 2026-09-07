@@ -144,12 +144,25 @@ function RepeatableList({
 interface ActivityFormProps {
   /** Fourni ⇒ le formulaire édite ; absent ⇒ il crée. */
   activity?: OperatorActivityDetail
+  /**
+   * Qui écrit.
+   *
+   * `operator` (défaut) écrit sous `ctx.operator.id` et renvoie une fiche
+   * publiée en modération. `admin` écrit pour l'opérateur désigné et ne touche
+   * pas au statut. Un seul formulaire pour les deux : c'est la même saisie, et
+   * deux copies auraient divergé dès le premier champ ajouté au schéma.
+   */
+  scope?: 'operator' | 'admin'
+  /** Obligatoire en `scope="admin"` à la création : pour quel opérateur. */
+  operatorId?: string
   onSuccess?: () => void
   onCancel?: () => void
 }
 
 export function ActivityForm({
   activity,
+  scope = 'operator',
+  operatorId,
   onSuccess,
   onCancel,
 }: ActivityFormProps) {
@@ -167,33 +180,57 @@ export function ActivityForm({
     trpc.activity.categories.queryOptions(),
   )
 
+  const isAdmin = scope === 'admin'
+
   const invalidate = () => {
+    if (isAdmin) {
+      queryClient.invalidateQueries({
+        queryKey: trpc.admin.activities.queryKey(),
+      })
+      queryClient.invalidateQueries({ queryKey: trpc.admin.overview.queryKey() })
+      return
+    }
+
     queryClient.invalidateQueries({
       queryKey: trpc.operator.listActivities.queryKey(),
     })
     queryClient.invalidateQueries({ queryKey: trpc.operator.stats.queryKey() })
   }
 
-  const create = useMutation(
-    trpc.operator.createActivity.mutationOptions({
-      onSuccess: () => {
-        invalidate()
-        onSuccess?.()
-      },
-    }),
+  // Les quatre mutations sont déclarées inconditionnellement : un `useMutation`
+  // derrière un `if` violerait les règles des hooks au premier changement de
+  // `scope`. C'est `handleSubmit` qui choisit, pas le rendu.
+  const done = {
+    onSuccess: () => {
+      invalidate()
+      onSuccess?.()
+    },
+  }
+
+  const operatorCreate = useMutation(
+    trpc.operator.createActivity.mutationOptions(done),
+  )
+  const operatorUpdate = useMutation(
+    trpc.operator.updateActivity.mutationOptions(done),
+  )
+  const adminCreate = useMutation(
+    trpc.admin.createActivity.mutationOptions(done),
+  )
+  const adminUpdate = useMutation(
+    trpc.admin.updateActivity.mutationOptions(done),
   )
 
-  const update = useMutation(
-    trpc.operator.updateActivity.mutationOptions({
-      onSuccess: () => {
-        invalidate()
-        onSuccess?.()
-      },
-    }),
-  )
+  const pending =
+    operatorCreate.isPending ||
+    operatorUpdate.isPending ||
+    adminCreate.isPending ||
+    adminUpdate.isPending
 
-  const pending = create.isPending || update.isPending
-  const error = create.error ?? update.error
+  const error =
+    operatorCreate.error ??
+    operatorUpdate.error ??
+    adminCreate.error ??
+    adminUpdate.error
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -239,10 +276,22 @@ export function ActivityForm({
     }
 
     if (activity) {
-      update.mutate({ activityId: activity.id, data: payload })
-    } else {
-      create.mutate(payload)
+      const variables = { activityId: activity.id, data: payload }
+      if (isAdmin) adminUpdate.mutate(variables)
+      else operatorUpdate.mutate(variables)
+      return
     }
+
+    if (isAdmin) {
+      // Garde d'affichage : le bouton est déjà désactivé sans opérateur choisi.
+      // Elle existe pour que l'oubli soit une erreur ici, et non une requête
+      // rejetée par Zod que l'admin lirait comme un bug.
+      if (!operatorId) return
+      adminCreate.mutate({ operatorId, data: payload })
+      return
+    }
+
+    operatorCreate.mutate(payload)
   }
 
   const steps = [
@@ -555,7 +604,9 @@ export function ActivityForm({
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={!canProceed() || pending}
+            disabled={
+              !canProceed() || pending || (isAdmin && !activity && !operatorId)
+            }
             className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-xl font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {pending ? (

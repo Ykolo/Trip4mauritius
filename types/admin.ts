@@ -1,6 +1,10 @@
 import type { ActivityStatus } from '@/types/activity'
 import type { BookingStatus } from '@/types/cart'
 import type { FeatureKey } from '@/lib/features'
+import type {
+  OperatorActivityDetail,
+  OperatorActivitySummary,
+} from '@/types/operator'
 
 // Contrat de sortie de l'espace d'administration.
 //
@@ -125,6 +129,41 @@ export interface AdminUsersPage {
   users: AdminUserRow[]
   total: number
   pages: number
+}
+
+// Catalogue vu par l'admin.
+//
+// On ÉTEND le contrat opérateur au lieu de le recopier : c'est la même entité,
+// éditée par le même formulaire. Deux interfaces jumelles auraient divergé au
+// premier champ ajouté, et l'écran d'administration aurait cessé d'afficher ce
+// que l'opérateur saisit. Les deux seuls champs propres à l'admin sont ceux
+// qu'un opérateur n'a aucune raison de voir : à QUI appartient la fiche.
+
+export interface AdminActivityRow extends OperatorActivitySummary {
+  operatorId: string
+  operatorName: string
+  /** Départs à venir — une fiche à zéro ne peut pas être mise en ligne. */
+  upcomingSlots: number
+  updatedAt: string
+}
+
+export interface AdminActivitiesPage {
+  activities: AdminActivityRow[]
+  total: number
+  pages: number
+}
+
+export interface AdminActivityDetail extends OperatorActivityDetail {
+  operatorId: string
+  operatorName: string
+}
+
+/** Une entrée du sélecteur d'opérateur, à la création d'une fiche. */
+export interface AdminOperatorOption {
+  id: string
+  displayName: string
+  verified: boolean
+  activityCount: number
 }
 
 export interface AdminOverview {
