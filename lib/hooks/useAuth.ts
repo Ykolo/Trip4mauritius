@@ -19,10 +19,14 @@ export type AuthUser = {
   email: string
   image: string | null
   phone: string | null
-  role: 'tourist' | 'operator' | 'admin'
+  role: 'tourist' | 'operator' | 'admin' | 'superadmin'
 }
 
-const ROLES = ['tourist', 'operator', 'admin'] as const
+// ⚠️ Toute valeur absente de cette liste retombe sur `tourist`. Ajouter un rôle
+// en base sans l'ajouter ICI le fait donc afficher comme un simple touriste —
+// c'est arrivé avec `superadmin`. Le repli est volontaire (voir ci-dessous),
+// mais il rend l'oubli silencieux.
+const ROLES = ['tourist', 'operator', 'admin', 'superadmin'] as const
 
 /**
  * `role` est déclaré `type: 'string'` côté Better Auth : il arrive donc typé

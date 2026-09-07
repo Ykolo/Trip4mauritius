@@ -16,12 +16,14 @@ function RoleBadge({ role }: { role: AuthUser['role'] }) {
     tourist: 'bg-primary/10 text-primary',
     operator: 'bg-accent/10 text-accent',
     admin: 'bg-red-100 text-red-800',
+    superadmin: 'bg-purple-100 text-purple-800',
   }
 
   const labels = {
     tourist: 'Tourist',
     operator: 'Operator',
     admin: 'Admin',
+    superadmin: 'Super admin',
   }
 
   return (
@@ -240,15 +242,21 @@ export default function AccountPage() {
         {/* Accès aux espaces réservés.
             Sans ce raccourci, /admin et /operator ne sont atteignables qu'en
             tapant l'URL — les pages existent mais rien n'y mène. */}
-        {(user.role === 'operator' || user.role === 'admin') && (
+        {(user.role === 'operator' ||
+          user.role === 'admin' ||
+          user.role === 'superadmin') && (
           <div className="mt-6 flex flex-wrap gap-3">
-            <Link
-              href="/operator/dashboard"
-              className="flex-1 min-w-[160px] text-center bg-white shadow-card rounded-2xl py-3 font-semibold text-ink hover:text-primary transition-colors"
-            >
-              Espace opérateur
-            </Link>
-            {user.role === 'admin' && (
+            {/* Le super admin n'a pas de profil opérateur : lui proposer cet
+                espace le mènerait à un écran « réservé aux partenaires ». */}
+            {user.role !== 'superadmin' && (
+              <Link
+                href="/operator/dashboard"
+                className="flex-1 min-w-[160px] text-center bg-white shadow-card rounded-2xl py-3 font-semibold text-ink hover:text-primary transition-colors"
+              >
+                Espace opérateur
+              </Link>
+            )}
+            {(user.role === 'admin' || user.role === 'superadmin') && (
               <Link
                 href="/admin"
                 className="flex-1 min-w-[160px] text-center bg-white shadow-card rounded-2xl py-3 font-semibold text-ink hover:text-primary transition-colors"
