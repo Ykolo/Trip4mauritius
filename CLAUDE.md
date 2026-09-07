@@ -29,7 +29,8 @@ types/               contrat de sortie : Activity, ActivityFull, Booking…
 ## Règles à ne pas enfreindre
 
 - **`prisma db push` est interdit.** Les contraintes `CHECK` sont écrites à la main dans le SQL des migrations ; `db push` les supprimerait en silence et rendrait la survente possible. Utiliser `prisma migrate dev` / `deploy`.
-- **Le `.env` local pointe sur la branche Neon `dev`, jamais sur la production.** `migrate reset` et le seed sont destructifs.
+- ⚠️ **Depuis le 07/09/2026, le site en ligne pointe sur la branche `dev`.** Les variables `DATABASE_URL` et `DATABASE_URL_UNPOOLED` de production Vercel ont été basculées sur l'endpoint `ep-polished-mouse-b2n8pcje`. **Le cloisonnement dev/prod n'existe donc plus** : `npm run db:seed`, `prisma migrate dev` et `migrate reset` lancés en local écrivent désormais dans la base que servent les visiteurs. La branche `production` (`br-winter-rice-b2ctx6se`, endpoint `ep-wild-unit-b23f1j9r`) est intacte et reste le chemin de retour.
+- **Le `.env` local pointe sur la branche Neon `dev`** — la même que la production, voir ci-dessus. `migrate reset` est destructif. Le seed, lui, ne l'est pas — tout y passe par `upsert`, et le catalogue est en `update: {}`, donc **relancer le seed ne restaure rien** — mais il réécrit sans condition le mot de passe et le rôle des 6 comptes prédéfinis. Le pointer sur la production y poserait le mot de passe public.
 - **Tout horaire d'activité se formate via `lib/datetime.ts`** (`Indian/Mauritius`, UTC+4, sans DST). Le fuseau du navigateur afficherait un départ de 09:00 à 07:00 pour un touriste à Paris.
 - **La base stocke `spotsTaken`, le front lit `spotsLeft`.** Conversion uniquement dans `server/mappers/`.
 - **Les prix se recalculent côté serveur**, jamais depuis la requête client. Zod valide la forme, pas la véracité. Le calcul 20/80 (RULE-001) vit dans `lib/pricing.ts`, en centimes entiers, et sert **aussi** à l'affichage client — deux implémentations divergeraient au premier arrondi.
@@ -73,7 +74,7 @@ Les tests d'intégration y visent un **Postgres jetable lancé dans le runner** 
 | Lot | État |
 |---|---|
 | 1 · Fondations Prisma | ✅ 9 contraintes CHECK en base |
-| 2 · Seed | ✅ 22 activités, 504 créneaux, 4 opérateurs, 1 admin — **avec identifiants** (`SEED_PASSWORD`) |
+| 2 · Seed | ✅ 22 activités, 504 créneaux, 6 comptes prédéfinis — mot de passe en clair dans `seed.ts`, `SEED_PASSWORD` reprend la main |
 | 3 · Services + tRPC | ✅ |
 | 4 · Lecture publique (RSC) | ✅ vérifié en production |
 | 5 · Auth | ✅ email/mot de passe branché, `proxy.ts` en place — **Google et magic link écartés** |
@@ -92,6 +93,7 @@ Les tests d'intégration y visent un **Postgres jetable lancé dans le runner** 
 - **Vérification d'email désactivée** (pas de Resend) : on peut s'inscrire avec l'adresse d'autrui. Corollaire : le champ email du profil est en lecture seule — changer d'adresse exigerait de vérifier la nouvelle.
 - **Rien ne freine encore la réservation.** Le garde-fou posé au lot 6 (une réservation active par créneau et par compte) empêche l'empilement trivial, mais **il est appliqué dans le service, pas par une contrainte en base** : Prisma ne modélise pas les index partiels et en supprimerait un au prochain `migrate dev`, silencieusement — exactement le risque que la règle sur `db push` existe pour éviter. La garantie tient parce que le contrôle est fait **après** l'UPDATE conditionnel, donc sous le verrou de ligne du créneau. À remplacer par un vrai index partiel le jour où Stripe rend l'acompte bloquant.
 - **Pas d'envoi de fichiers.** Photos d'activité et logo opérateur se saisissent en URL. Vercel Blob n'est pas installé et aucun `BLOB_READ_WRITE_TOKEN` n'est posé — à provisionner avant d'ouvrir aux opérateurs réels, sinon chacun devra héberger ses images ailleurs.
+- **Le mot de passe du seed est public.** `AdminTrip4Mauritius` est en clair dans `prisma/seed.ts`, sur un dépôt GitHub public, et vaut pour les 6 comptes prédéfinis — admin compris. C'est un choix de confort assumé pour la démonstration. **Poser `SEED_PASSWORD` avant d'ouvrir le site à de vrais utilisateurs**, et changer le mot de passe de l'admin de production.
 - **Comptes de test `@example.com`** présents en production, laissés pour les tests client. À nettoyer avant mise en ligne.
 - **Descriptions d'activités générées** par gabarit dans le seed — à remplacer par de vrais textes.
 - **`images.unoptimized: true`** alors que certaines images pèsent ~1 Mo.

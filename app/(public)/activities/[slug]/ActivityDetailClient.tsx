@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { ChevronRight, Clock, Users, Globe, Star, BadgeCheck, Check, X } from 'lucide-react'
+import { ChevronRight, Clock, Users, Globe, BadgeCheck, Check, X } from 'lucide-react'
 import { ImageGallery } from '@/components/ui/ImageGallery'
 import { SlotSelector } from '@/components/ui/SlotSelector'
 import { PriceBreakdown } from '@/components/ui/PriceBreakdown'
@@ -75,13 +75,6 @@ export function ActivityDetailClient({ activity }: ActivityDetailClientProps) {
                 <span className="bg-muted/30 text-ink px-3 py-1 rounded-full text-sm">
                   {activity.category}
                 </span>
-                {activity.rating && (
-                  <div className="flex items-center gap-1 text-sm">
-                    <Star className="w-4 h-4 fill-accent text-accent" />
-                    <span className="font-medium">{activity.rating}</span>
-                    <span className="text-muted">({activity.reviewCount} reviews)</span>
-                  </div>
-                )}
               </div>
             </div>
 

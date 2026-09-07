@@ -26,7 +26,9 @@ Le seed crée des comptes **connectables**, tous avec le même mot de passe :
 | `contact@blue-safari.mu` et les 3 autres | operator | Gérer les activités déjà publiées |
 | `tourist@example.com` | tourist | Exercer le tunnel de réservation |
 
-Le mot de passe est celui de la variable d'environnement `SEED_PASSWORD` (12 caractères minimum). Si elle n'est pas posée, `npm run db:seed` en tire un au hasard et **l'affiche une seule fois** en fin d'exécution — notez-le à ce moment-là, ou relancez le seed avec `SEED_PASSWORD` posée.
+Le mot de passe des six comptes est **`AdminTrip4Mauritius`**. Il est écrit en clair dans `prisma/seed.ts` pour que le jeu de démonstration soit utilisable sans configuration préalable, et le seed récapitule les comptes en fin d'exécution.
+
+⚠️ **Le dépôt est public, ce mot de passe l'est donc aussi.** Il ne convient qu'à des données de démonstration. Sur toute base accessible à de vrais utilisateurs — la production en premier lieu — posez `SEED_PASSWORD` (12 caractères minimum) : elle reprend la main sur la valeur par défaut.
 
 Relancer le seed réécrit ces mots de passe ; il ne touche à aucun autre compte.
 

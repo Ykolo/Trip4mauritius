@@ -1,6 +1,5 @@
 import Image from 'next/image'
 import Link from 'next/link'
-import { Star } from 'lucide-react'
 import type { Activity } from '@/types/activity'
 
 interface ActivityCardProps {
@@ -38,17 +37,11 @@ export function ActivityCard({ activity }: ActivityCardProps) {
             {activity.region} · {activity.duration}
           </p>
           
-          {/* Footer — Mobile-first: price + rating inline */}
+          {/* Footer — le prix seul : les avis ne sont plus affichés. */}
           <div className="flex items-center gap-2">
             <span className="text-primary font-bold text-sm">
               Dès {activity.priceFrom}€
             </span>
-            {activity.rating && (
-              <span className="flex items-center gap-0.5 text-[11px] text-muted ml-auto">
-                <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                {activity.rating.toFixed(1)}
-              </span>
-            )}
           </div>
         </div>
       </div>
