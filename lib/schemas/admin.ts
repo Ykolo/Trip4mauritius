@@ -1,16 +1,43 @@
 import { z } from 'zod'
 import { FEATURE_KEYS, type FeatureKey } from '@/lib/features'
 import { activityInputSchema } from '@/lib/schemas/operator'
+import { isUsableWhatsAppNumber } from '@/lib/whatsapp'
 
 // Aucun schéma ne porte de `role` : le rôle est décidé par la procédure
 // appelée (`createOperator`), jamais par une valeur venue de la requête. Un
 // champ `role` libre ici suffirait à transformer la création d'opérateur en
 // fabrique d'administrateurs.
 
+// Le numéro WhatsApp est validé par le MÊME prédicat que celui qui décide, à
+// l'affichage, si le bouton du back-office est actif (`lib/whatsapp.ts`). Un
+// `z.string()` nu laisserait entrer « à demander » ou « 5789 1234 » sans
+// indicatif : la ligne serait acceptée, et le bouton resterait mystérieusement
+// grisé sans que rien ne l'explique.
+//
+// Une chaîne vide vaut « pas de numéro » et devient `null` : c'est ce que
+// renvoie un champ de formulaire qu'on vide, et le refuser interdirait de
+// retirer un numéro devenu faux.
+const whatsapp = z
+  .string()
+  .trim()
+  .max(30)
+  .refine((value) => value === '' || isUsableWhatsAppNumber(value), {
+    message:
+      'Indiquez le numéro au format international, indicatif compris (+230 5789 1234).',
+  })
+  .transform((value) => (value === '' ? null : value))
+  .nullish()
+
 export const createOperatorSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1).max(120),
   displayName: z.string().min(1).max(120),
+  whatsapp,
+})
+
+export const setOperatorWhatsappSchema = z.object({
+  operatorId: z.string().min(1),
+  whatsapp,
 })
 
 // La clé est validée contre le REGISTRE, pas contre `z.string()` : une clé
@@ -54,6 +81,7 @@ export const adminBookingsSchema = z.object({
 
 export type AdminBookingsInput = z.infer<typeof adminBookingsSchema>
 export type CreateOperatorInput = z.infer<typeof createOperatorSchema>
+export type SetOperatorWhatsappInput = z.infer<typeof setOperatorWhatsappSchema>
 
 // Catalogue.
 //

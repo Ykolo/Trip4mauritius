@@ -32,6 +32,19 @@ export function mauritiusTime(instant: Date): string {
 }
 
 /**
+ * Date ET heure mauricienne, format `YYYY-MM-DD à HH:mm`.
+ *
+ * Pour les horodatages techniques — quand une réservation a été passée, par
+ * exemple — par opposition à `mauritiusDate`/`mauritiusTime` qui décrivent un
+ * départ. Même fuseau pour les deux, volontairement : l'admin lit les deux
+ * dates sur la même ligne, les afficher dans deux fuseaux différents rendrait
+ * incomparable « commandé le » et « part le ».
+ */
+export function mauritiusDateTime(instant: Date): string {
+  return `${dateFormatter.format(instant)} à ${timeFormatter.format(instant)}`
+}
+
+/**
  * Instant UTC correspondant à une heure murale mauricienne.
  * L'offset étant fixe, un simple décalage suffit — pas de gestion de DST.
  */

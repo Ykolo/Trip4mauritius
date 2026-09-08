@@ -191,7 +191,6 @@ export async function createBookings(input: {
 
   return {
     bookings,
-    bookingRef: bookings[0]?.bookingRef ?? '',
     totalDeposit: bookings.reduce((sum, b) => sum + b.depositDue, 0),
   }
 }

@@ -194,9 +194,35 @@ describe('createBookings — montants et référence', () => {
       ),
     )
 
-    const refs = results.map((r) => r.bookingRef)
+    const refs = results.flatMap((r) => r.bookings.map((b) => b.bookingRef))
     // C'est ce qu'un `count() + 1` casserait silencieusement.
     expect(new Set(refs).size).toBe(refs.length)
+  })
+
+  it('rend une référence PAR activité du panier, pas une seule', async () => {
+    // Le régression que ce test verrouille : `createBookings` exposait un
+    // `bookingRef` au singulier — celui de la première ligne — et l'écran de
+    // confirmation n'affichait que lui. Le touriste repartait avec un code sur
+    // deux, quand l'admin en voyait bien deux.
+    const first = await makeActivity({ pricePerPerson: 100, maxSpots: 10 })
+    const second = await makeActivity({ pricePerPerson: 50, maxSpots: 10 })
+    const [userId] = await makeTourists(1)
+
+    const result = await createBookings({
+      userId,
+      lines: [
+        { slotId: first.slot.id, participants: 2 },
+        { slotId: second.slot.id, participants: 1 },
+      ],
+      contactPhone: '+230 5000 0000',
+    })
+
+    expect(result.bookings).toHaveLength(2)
+    const refs = result.bookings.map((b) => b.bookingRef)
+    expect(new Set(refs).size).toBe(2)
+    for (const ref of refs) expect(ref).toMatch(/^MX-\d{4}-\d{6}$/)
+    // 20 % de (2 × 100) + 20 % de (1 × 50)
+    expect(result.totalDeposit).toBe(50)
   })
 
   it('adopte le téléphone comme défaut du profil sans écraser un existant', async () => {

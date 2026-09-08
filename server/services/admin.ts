@@ -135,6 +135,7 @@ export async function listBookingsForAdmin(
       operatorId: booking.slot.activity.operator.id,
       operatorName: booking.slot.activity.operator.displayName,
       operatorEmail: booking.slot.activity.operator.user.email,
+      operatorWhatsapp: booking.slot.activity.operator.whatsapp,
     })),
     total,
     pages: Math.max(1, Math.ceil(total / ROWS_PER_PAGE)),
@@ -160,9 +161,35 @@ export async function listOperators(): Promise<AdminOperator[]> {
     displayName: operator.displayName,
     userName: operator.user.name,
     userEmail: operator.user.email,
+    whatsapp: operator.whatsapp,
     activityCount: operator._count.activities,
     createdAt: operator.createdAt.toISOString(),
   }))
+}
+
+/**
+ * Renseigne ou retire le numéro WhatsApp d'un opérateur.
+ *
+ * Non filtré par opérateur, et c'est voulu : l'admin corrige la fiche de
+ * n'importe quel prestataire — même logique que `admin-catalog.ts`. Un
+ * opérateur ne peut PAS modifier ce champ depuis son espace : le back-office
+ * s'en sert pour le joindre, le laisser le réécrire lui donnerait le moyen de
+ * se rendre injoignable en silence.
+ *
+ * `null` est une valeur légitime : un numéro devenu faux doit pouvoir être
+ * effacé, sinon le bouton composerait indéfiniment une ligne coupée.
+ */
+export async function setOperatorWhatsapp(input: {
+  operatorId: string
+  whatsapp: string | null
+}): Promise<{ whatsapp: string | null }> {
+  const updated = await db.operator.update({
+    where: { id: input.operatorId },
+    data: { whatsapp: input.whatsapp },
+    select: { whatsapp: true },
+  })
+
+  return updated
 }
 
 /**
@@ -187,6 +214,7 @@ export async function createOperator(input: {
   email: string
   name: string
   displayName: string
+  whatsapp?: string | null
 }): Promise<{ operatorId: string; userCreated: boolean }> {
   const email = input.email.trim().toLowerCase()
 
@@ -231,6 +259,7 @@ export async function createOperator(input: {
       data: {
         userId: user.id,
         displayName: input.displayName.trim(),
+        whatsapp: input.whatsapp ?? null,
         // Plus de file de validation : un opérateur créé par l'admin est
         // vérifié par construction. La colonne survit pour l'affichage public.
         verified: true,

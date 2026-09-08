@@ -155,6 +155,19 @@ model Operator {
   stripeAccountId String? @unique
   payoutEnabled   Boolean @default(false)
 
+  /// Numéro WhatsApp professionnel, celui que le back-office compose pour
+  /// joindre le prestataire au sujet d'une réservation.
+  ///
+  /// Volontairement DISTINCT de `User.phone`, qui est le numéro personnel du
+  /// compte : le titulaire le modifie depuis /account, et une entreprise change
+  /// de gérant sans changer de ligne commerciale. Même raisonnement que
+  /// `Booking.contactPhone`, qui fige le numéro du touriste pour ne pas dépendre
+  /// de son profil.
+  ///
+  /// Nullable, et ça restera : les opérateurs existants n'en ont pas, et le
+  /// bouton WhatsApp se désactive plutôt que de composer un numéro inventé.
+  whatsapp String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
