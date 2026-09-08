@@ -49,7 +49,7 @@ async function activityInput(
     title: `${TEST_PREFIX}offre ${Math.random().toString(36).slice(2, 8)}`,
     categoryId: await testCategoryId(),
     region: 'South',
-    duration: '3 hours',
+    duration: 'Demi-journée',
     description: { fr: 'Description de test.' },
     priceHT: 60,
     maxParticipants: 8,

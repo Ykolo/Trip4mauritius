@@ -2,8 +2,13 @@ import { TRPCError } from '@trpc/server'
 import {
   activityFiltersSchema,
   activitySlugSchema,
+  activitySuggestSchema,
 } from '@/lib/schemas/activity'
-import { getActivityBySlug, listActivities } from '@/server/services/activity'
+import {
+  getActivityBySlug,
+  listActivities,
+  suggestActivities,
+} from '@/server/services/activity'
 import { listActiveCategories } from '@/server/services/category'
 import { createTRPCRouter, publicProcedure } from '@/server/trpc/init'
 
@@ -25,6 +30,14 @@ export const activityRouter = createTRPCRouter({
   list: publicProcedure
     .input(activityFiltersSchema)
     .query(({ input }) => listActivities(input)),
+
+  /**
+   * Suggestions de la barre de recherche. Publique : elle ne rend que des
+   * activités publiées, exactement comme le catalogue.
+   */
+  suggest: publicProcedure
+    .input(activitySuggestSchema)
+    .query(({ input }) => suggestActivities(input.q)),
 
   bySlug: publicProcedure
     .input(activitySlugSchema)

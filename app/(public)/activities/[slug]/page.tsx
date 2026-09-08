@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { regionLabel } from '@/lib/regions'
 import { PriceBreakdownWrapper as BookingPanel } from '@/components/ui/PriceBreakdownWrapper'
 import { getActivityBySlug } from '@/server/services/activity'
 
@@ -99,7 +100,7 @@ export default async function ActivityDetailedPage({
             {activity.title}
           </h1>
           <p className="text-white/90 font-body flex items-center gap-1.5 drop-shadow-sm font-medium text-sm md:text-base">
-            <MapPin className="w-5 h-5 text-accent" /> Île Maurice — {activity.region}
+            <MapPin className="w-5 h-5 text-accent" /> Île Maurice — {regionLabel(activity.region)}
           </p>
         </div>
       </div>

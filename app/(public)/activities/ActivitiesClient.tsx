@@ -1,7 +1,7 @@
 'use client'
 
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { SlidersHorizontal } from 'lucide-react'
+import { SlidersHorizontal, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { ActivityCard } from '@/components/ui/ActivityCard'
@@ -11,6 +11,7 @@ import { useTRPC } from '@/lib/trpc/client'
 import type { ActivitiesResponse, ActivityFilters } from '@/types/activity'
 
 type FilterAction =
+  | { type: 'SET_KEYWORD'; payload: string | undefined }
   | { type: 'SET_REGION'; payload: string[] }
   | { type: 'SET_CATEGORY'; payload: string[] }
   | { type: 'SET_PRICE_RANGE'; payload: { min: number; max: number } }
@@ -22,6 +23,8 @@ type FilterAction =
 
 function filterReducer(state: ActivityFilters, action: FilterAction): ActivityFilters {
   switch (action.type) {
+    case 'SET_KEYWORD':
+      return { ...state, q: action.payload, page: 1 }
     case 'SET_REGION':
       return { ...state, region: action.payload, page: 1 }
     case 'SET_CATEGORY':
@@ -45,6 +48,10 @@ function filterReducer(state: ActivityFilters, action: FilterAction): ActivityFi
 
 function filtersToSearchParams(filters: ActivityFilters): string {
   const params = new URLSearchParams()
+  // `q` en premier, et surtout : présent. Cette fonction réécrit l'URL à chaque
+  // changement de filtre ; en omettant le mot-clé, elle l'effaçait de la barre
+  // d'adresse une fraction de seconde après l'arrivée sur la page.
+  if (filters.q) params.set('q', filters.q)
   if (filters.region?.length) params.set('region', filters.region.join(','))
   if (filters.category?.length) params.set('category', filters.category.join(','))
   if (filters.minPrice !== undefined) params.set('minPrice', String(filters.minPrice))
@@ -58,6 +65,7 @@ function filtersToSearchParams(filters: ActivityFilters): string {
 /** Clé canonique, pour comparer des filtres indépendamment de l'ordre des clés. */
 function filtersKey(f: ActivityFilters): string {
   return JSON.stringify({
+    q: f.q ?? null,
     region: [...(f.region ?? [])].sort(),
     category: [...(f.category ?? [])].sort(),
     lang: [...(f.lang ?? [])].sort(),
@@ -158,6 +166,7 @@ export function ActivitiesClient({
 
   const displayActivities = isMobile ? allActivities : (data?.activities ?? [])
   const activeFilterCount =
+    (filters.q ? 1 : 0) +
     (filters.region?.length || 0) +
     (filters.category?.length || 0) +
     (filters.duration ? 1 : 0) +
@@ -182,11 +191,25 @@ export function ActivitiesClient({
 
       <div className="max-w-7xl mx-auto px-4 py-6 lg:py-8">
         <div className="mb-6 lg:mb-8">
-          <h1 className="text-2xl lg:text-3xl font-bold text-ink">Activities in Mauritius</h1>
+          <h1 className="text-2xl lg:text-3xl font-bold text-ink">Activités à l&rsquo;île Maurice</h1>
           {data && (
             <p className="text-muted mt-1">
-              {data.total} {data.total === 1 ? 'activity' : 'activities'} found
+              {/* En français, zéro prend le singulier : « 0 activité trouvée ». */}
+              {data.total} {data.total > 1 ? 'activités trouvées' : 'activité trouvée'}
             </p>
+          )}
+
+          {/* Le mot-clé se voit et se retire. Sans ce rappel, une recherche
+              infructueuse ressemble à un catalogue vide. */}
+          {filters.q && (
+            <button
+              onClick={() => dispatch({ type: 'SET_KEYWORD', payload: undefined })}
+              className="mt-3 inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/20 transition-colors"
+            >
+              <span>« {filters.q} »</span>
+              <X className="w-4 h-4" aria-hidden />
+              <span className="sr-only">Effacer la recherche</span>
+            </button>
           )}
         </div>
 
@@ -234,12 +257,16 @@ export function ActivitiesClient({
               </>
             ) : (
               <div className="text-center py-16">
-                <p className="text-muted text-lg">No activities found matching your filters.</p>
+                <p className="text-muted text-lg">
+                  {filters.q
+                    ? `Aucune activité ne correspond à « ${filters.q} ».`
+                    : 'Aucune activité ne correspond à ces filtres.'}
+                </p>
                 <button
                   onClick={() => dispatch({ type: 'RESET' })}
                   className="mt-4 text-primary font-medium hover:underline"
                 >
-                  Clear all filters
+                  Tout réinitialiser
                 </button>
               </div>
             )}

@@ -3,7 +3,10 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, ChevronLeft, ChevronRight, Loader2, Plus, Trash2 } from 'lucide-react'
+import { ImageUploadButton } from '@/components/forms/ImageUploadButton'
 import { useTRPC } from '@/lib/trpc/client'
+import { DURATIONS } from '@/lib/durations'
+import { REGIONS, REGION_VALUES } from '@/lib/regions'
 import type { ActivityInput } from '@/lib/schemas/operator'
 import type { OperatorActivityDetail } from '@/types/operator'
 
@@ -11,9 +14,11 @@ import type { OperatorActivityDetail } from '@/types/operator'
 //
 // Deux écarts avec la version précédente, tous deux dictés par le schéma réel :
 //
-// 1. Les images sont des URLs, pas des fichiers encodés en base64. Un base64 de
-//    1 Mo stocké dans `imageUrls` serait relu à chaque affichage du catalogue.
-//    L'upload arrivera avec Vercel Blob.
+// 1. La base stocke des URLs, jamais un fichier encodé en base64 — un base64 de
+//    1 Mo dans `imageUrls` serait relu à chaque affichage du catalogue. L'envoi
+//    de fichiers existe désormais (`ImageUploadButton`), mais il ne change rien
+//    à cette règle : le fichier part vers Vercel Blob et c'est son URL qui est
+//    enregistrée.
 // 2. La description n'a plus de découpage court/long — la base stocke un objet
 //    multilingue. Le français est obligatoire, les autres langues sont
 //    facultatives et retombent sur lui à l'affichage.
@@ -25,17 +30,12 @@ import type { OperatorActivityDetail } from '@/types/operator'
 // l'accueil. Un opérateur pouvait classer son activité dans « Nightlife », que
 // personne ne pouvait ensuite filtrer.
 
-const REGIONS = ['North', 'South', 'East', 'West', 'Centre']
-
-const DURATIONS = [
-  '1 hour',
-  '2 hours',
-  '3 hours',
-  'Half day',
-  'Full day',
-  '2 days',
-]
-
+// Régions et durées : mêmes sources uniques que le tiroir de filtres.
+//
+// Ce fichier portait sa propre liste de durées — « 1 hour », « 2 hours »,
+// « 3 hours », « 2 days » — dont AUCUNE n'était proposée au visiteur. Une
+// activité saisie « 3 hours » n'apparaissait donc dans aucun filtre de durée,
+// exactement comme les catégories inventées décrites ci-dessus.
 const LANGUAGES = [
   { code: 'FR', label: 'Français' },
   { code: 'EN', label: 'Anglais' },
@@ -51,7 +51,16 @@ const TRANSLATIONS = [
   { key: 'ru', label: 'Russe' },
 ] as const
 
-type FormState = ActivityInput
+/**
+ * L'état du formulaire, pas encore validé : région et durée y valent `''` tant
+ * que rien n'est choisi, alors que `ActivityInput` n'accepte que des valeurs
+ * réelles. C'est le `<select>` qui garantit qu'on n'en sortira jamais autre
+ * chose, et Zod qui refuse le `''` à la soumission.
+ */
+type FormState = Omit<ActivityInput, 'region' | 'duration'> & {
+  region: ActivityInput['region'] | ''
+  duration: ActivityInput['duration'] | ''
+}
 
 const EMPTY: FormState = {
   title: '',
@@ -67,12 +76,29 @@ const EMPTY: FormState = {
   excluded: [''],
 }
 
+/**
+ * Ramène une valeur venue de la base dans la liste fermée, ou à `''`.
+ *
+ * La base contient encore des activités saisies avant que région et durée
+ * soient contraintes. Les recharger telles quelles remettrait dans le
+ * formulaire une valeur qu'aucune option ne propose : le `<select>` afficherait
+ * un choix vide sans le dire, et l'enregistrement échouerait à la validation
+ * sans que rien ne désigne le champ fautif. Retomber sur « Choisir… » rend le
+ * problème visible et forçe la correction.
+ */
+function knownOr<T extends string>(
+  value: string,
+  allowed: readonly T[],
+): T | '' {
+  return (allowed as readonly string[]).includes(value) ? (value as T) : ''
+}
+
 function fromDetail(detail: OperatorActivityDetail): FormState {
   return {
     title: detail.title,
     categoryId: detail.categoryId,
-    region: detail.region,
-    duration: detail.duration,
+    region: knownOr(detail.region, REGION_VALUES),
+    duration: knownOr(detail.duration, DURATIONS),
     description: detail.description,
     priceHT: detail.priceHT,
     maxParticipants: detail.maxParticipants,
@@ -256,11 +282,18 @@ export function ActivityForm({
   }
 
   const handleSubmit = () => {
+    // Région et durée sont obligatoires — l'étape 1 et l'étape 2 refusent déjà
+    // d'avancer sans elles. Le rappeler ici sort le `''` du type, et couvre le
+    // jour où quelqu'un desserrera `canProceed`.
+    if (!form.region || !form.duration) return
+
     // Les lignes vides des listes répétables sont retirées ici plutôt que
     // laissées au serveur : le schéma les filtre aussi, mais l'utilisateur doit
     // voir ce qui part.
-    const payload: FormState = {
+    const payload: ActivityInput = {
       ...form,
+      region: form.region,
+      duration: form.duration,
       imageUrls: form.imageUrls.map((u) => u.trim()).filter(Boolean),
       included: form.included.map((i) => i.trim()).filter(Boolean),
       excluded: form.excluded.map((i) => i.trim()).filter(Boolean),
@@ -372,13 +405,15 @@ export function ActivityForm({
               </label>
               <select
                 value={form.region}
-                onChange={(e) => set('region', e.target.value)}
+                onChange={(e) => set('region', e.target.value as FormState['region'])}
                 className="w-full px-4 py-3 rounded-xl border border-surface bg-base focus:outline-none focus:ring-2 focus:ring-primary/30"
               >
                 <option value="">Choisir…</option>
+                {/* On affiche le libellé français, on enregistre la valeur
+                    stockée en base. */}
                 {REGIONS.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
+                  <option key={r.value} value={r.value}>
+                    {r.label}
                   </option>
                 ))}
               </select>
@@ -460,7 +495,7 @@ export function ActivityForm({
               </label>
               <select
                 value={form.duration}
-                onChange={(e) => set('duration', e.target.value)}
+                onChange={(e) => set('duration', e.target.value as FormState['duration'])}
                 className="w-full px-4 py-3 rounded-xl border border-surface bg-base focus:outline-none focus:ring-2 focus:ring-primary/30"
               >
                 <option value="">Choisir…</option>
@@ -536,10 +571,33 @@ export function ActivityForm({
         <div className="space-y-6">
           <div>
             <p className="text-sm text-muted mb-4">
-              Indiquez l&apos;adresse de vos photos : un chemin interne
+              Envoyez vos photos depuis votre ordinateur, ou indiquez
+              l&apos;adresse d&apos;images déjà hébergées : un chemin interne
               (<code>/images/…</code>) ou une URL <code>https://</code>. La
               première sert de photo de couverture.
             </p>
+
+            {/* L'envoi remplit la première ligne vide de la liste plutôt que
+                d'en ajouter une : `imageUrls` démarre à `['']`, et empiler
+                sans cela laisserait une entrée vide en tête — donc une
+                couverture vide. */}
+            <div className="mb-4">
+              <ImageUploadButton
+                onUploaded={(url) =>
+                  set(
+                    'imageUrls',
+                    (() => {
+                      const next = [...form.imageUrls]
+                      const slot = next.findIndex((u) => !u.trim())
+                      if (slot === -1) next.push(url)
+                      else next[slot] = url
+                      return next
+                    })(),
+                  )
+                }
+              />
+            </div>
+
             <RepeatableList
               label="Photos *"
               placeholder="/images/regions/east.jpg"

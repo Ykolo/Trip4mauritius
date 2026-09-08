@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { DURATIONS } from '@/lib/durations'
 
 // Un schéma, trois usages : input tRPC, parsing des searchParams côté RSC,
 // et source de types. Les filtres vivant déjà dans l'URL, le serveur peut
@@ -18,15 +19,46 @@ const stringList = z
 const positiveNumber = z.coerce.number().nonnegative().optional()
 
 export const activityFiltersSchema = z.object({
+  /**
+   * Recherche plein texte, saisie dans la barre du haut et sur l'accueil.
+   *
+   * Elle était émise par le formulaire d'accueil (`?q=…`) mais n'existait dans
+   * aucun schéma : Zod la supprimait silencieusement, et le catalogue renvoyait
+   * tout le catalogue quel que soit le mot-clé.
+   *
+   * Normalisée ici — trim, et vide traité comme absent — pour que `?q=` et
+   * `?q=%20` ne produisent pas trois URL différentes pour la même liste.
+   */
+  q: z
+    .string()
+    .optional()
+    .transform((v) => {
+      const trimmed = v?.trim()
+      return trimmed ? trimmed : undefined
+    }),
   region: stringList,
   category: stringList,
   lang: stringList,
   minPrice: positiveNumber,
   maxPrice: positiveNumber,
+  /**
+   * Une durée de la liste fermée, ou rien.
+   *
+   * Le filtre laissait passer n'importe quelle chaîne, en écartant seulement la
+   * sentinelle `Any` — que plus aucun écran n'émet depuis que le tiroir dit
+   * « Toutes ». Une URL portant `?duration=Toutes` filtrait donc sur la chaîne
+   * « Toutes », qu'aucune activité ne porte, et la page s'affichait vide.
+   *
+   * Tout ce qui n'est pas une vraie durée est traité comme « pas de filtre » :
+   * une valeur périmée dans un lien partagé doit rendre la liste complète, pas
+   * une page blanche.
+   */
   duration: z
     .string()
     .optional()
-    .transform((v) => (v && v !== 'Any' ? v : undefined)),
+    .transform((v) =>
+      v && (DURATIONS as readonly string[]).includes(v) ? v : undefined,
+    ),
   page: z.coerce.number().int().min(1).catch(1).default(1),
 })
 
@@ -34,6 +66,25 @@ export type ActivityFiltersInput = z.infer<typeof activityFiltersSchema>
 
 export const activitySlugSchema = z.object({
   slug: z.string().min(1),
+})
+
+/**
+ * Entrée des suggestions de la barre de recherche.
+ *
+ * `q` est facultatif : sans lui, la barre qu'on vient d'ouvrir propose les
+ * activités les mieux notées. Le plafond de 100 caractères n'est pas cosmétique
+ * — cette requête part à chaque frappe, et rien n'oblige un client à respecter
+ * la taille du champ.
+ */
+export const activitySuggestSchema = z.object({
+  q: z
+    .string()
+    .max(100)
+    .optional()
+    .transform((v) => {
+      const trimmed = v?.trim()
+      return trimmed ? trimmed : undefined
+    }),
 })
 
 export const ACTIVITY_LOCALES = ['fr', 'en', 'de', 'es', 'ru'] as const

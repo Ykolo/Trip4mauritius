@@ -3,11 +3,22 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
 import { useTRPC } from '@/lib/trpc/client'
+import { DURATIONS } from '@/lib/durations'
+import { REGIONS } from '@/lib/regions'
 import { Slider } from '@/components/ui/slider'
 import type { ActivityFilters } from '@/types/activity'
 
-const REGIONS = ['Nord', 'Sud', 'Est', 'Ouest', 'Centre']
-const DURATIONS = ['Toutes', '< 2h', 'Demi-journée', 'Journée', 'Plusieurs jours']
+// Régions et durées viennent de `lib/` — mêmes constantes que le formulaire de
+// saisie et que le schéma d'écriture.
+//
+// Les listes en dur qui vivaient ici étaient en français (« Nord », « Sud »,
+// « Est », « Ouest ») alors que la base stocke l'anglais : quatre régions sur
+// cinq ne renvoyaient rien. Même histoire que les catégories, réglée au lot 10 —
+// on AFFICHE un libellé, on FILTRE sur une valeur stable.
+//
+// « Toutes » n'est PAS une durée : c'est le sentinelle qui efface le filtre, et
+// il n'a rien à faire dans la liste des valeurs stockables.
+const ALL_DURATIONS = 'Toutes'
 
 // Les catégories viennent de la base — la liste en dur qui vivait ici affichait
 // « Sports Nautiques », « Croisières », « Bien-être », alors que la base
@@ -49,7 +60,11 @@ export function FilterDrawer({ filters, onFiltersChange, onClose, isOpen }: Filt
   }
 
   const handleDurationChange = (duration: string) => {
-    onFiltersChange({ ...filters, duration: duration === 'Toutes' ? undefined : duration, page: 1 })
+    onFiltersChange({
+      ...filters,
+      duration: duration === ALL_DURATIONS ? undefined : duration,
+      page: 1,
+    })
   }
 
   const handleLanguageToggle = (lang: string) => {
@@ -101,10 +116,10 @@ export function FilterDrawer({ filters, onFiltersChange, onClose, isOpen }: Filt
                 <div className="flex flex-wrap gap-2">
                   {REGIONS.map(region => (
                     <CheckboxChip
-                      key={region}
-                      label={region}
-                      checked={(filters.region || []).includes(region)}
-                      onChange={() => handleRegionToggle(region)}
+                      key={region.value}
+                      label={region.label}
+                      checked={(filters.region || []).includes(region.value)}
+                      onChange={() => handleRegionToggle(region.value)}
                     />
                   ))}
                 </div>
@@ -136,11 +151,11 @@ export function FilterDrawer({ filters, onFiltersChange, onClose, isOpen }: Filt
               {/* Duration */}
               <FilterSection title="Durée">
                 <div className="flex flex-wrap gap-2">
-                  {DURATIONS.map(duration => (
+                  {[ALL_DURATIONS, ...DURATIONS].map(duration => (
                     <RadioChip
                       key={duration}
                       label={duration}
-                      checked={(filters.duration || 'Toutes') === duration || (duration === 'Toutes' && !filters.duration)}
+                      checked={(filters.duration ?? ALL_DURATIONS) === duration}
                       onChange={() => handleDurationChange(duration)}
                     />
                   ))}
@@ -277,7 +292,11 @@ export function FilterSidebar({ filters, onFiltersChange }: Omit<FilterDrawerPro
   }
 
   const handleDurationChange = (duration: string) => {
-    onFiltersChange({ ...filters, duration: duration === 'Toutes' ? undefined : duration, page: 1 })
+    onFiltersChange({
+      ...filters,
+      duration: duration === ALL_DURATIONS ? undefined : duration,
+      page: 1,
+    })
   }
 
   const handleLanguageToggle = (lang: string) => {
@@ -312,14 +331,14 @@ export function FilterSidebar({ filters, onFiltersChange }: Omit<FilterDrawerPro
       <FilterSection title="Région">
         <div className="space-y-2">
           {REGIONS.map(region => (
-            <label key={region} className="flex items-center gap-3 cursor-pointer">
+            <label key={region.value} className="flex items-center gap-3 cursor-pointer">
               <input
                 type="checkbox"
-                checked={(filters.region || []).includes(region)}
-                onChange={() => handleRegionToggle(region)}
+                checked={(filters.region || []).includes(region.value)}
+                onChange={() => handleRegionToggle(region.value)}
                 className="w-4 h-4 rounded border-muted accent-primary"
               />
-              <span className="text-sm text-ink">{region}</span>
+              <span className="text-sm text-ink">{region.label}</span>
             </label>
           ))}
         </div>
@@ -354,12 +373,12 @@ export function FilterSidebar({ filters, onFiltersChange }: Omit<FilterDrawerPro
       {/* Duration */}
       <FilterSection title="Durée">
         <div className="space-y-2">
-          {DURATIONS.map(duration => (
+          {[ALL_DURATIONS, ...DURATIONS].map(duration => (
             <label key={duration} className="flex items-center gap-3 cursor-pointer">
               <input
                 type="radio"
                 name="duration"
-                checked={(filters.duration || 'Toutes') === duration || (duration === 'Toutes' && !filters.duration)}
+                checked={(filters.duration ?? ALL_DURATIONS) === duration}
                 onChange={() => handleDurationChange(duration)}
                 className="w-4 h-4 border-muted accent-primary"
               />

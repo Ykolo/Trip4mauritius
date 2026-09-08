@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { ChevronRight, Clock, Users, Globe, BadgeCheck, Check, X } from 'lucide-react'
+import { regionLabel } from '@/lib/regions'
 import { ImageGallery } from '@/components/ui/ImageGallery'
 import { SlotSelector } from '@/components/ui/SlotSelector'
 import { PriceBreakdown } from '@/components/ui/PriceBreakdown'
@@ -70,7 +71,7 @@ export function ActivityDetailClient({ activity }: ActivityDetailClientProps) {
               <h1 className="font-display text-3xl text-ink mb-2">{activity.title}</h1>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-sm font-medium">
-                  {activity.region}
+                  {regionLabel(activity.region)}
                 </span>
                 <span className="bg-muted/30 text-ink px-3 py-1 rounded-full text-sm">
                   {activity.category}

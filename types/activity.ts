@@ -50,7 +50,24 @@ export interface ActivityFull extends Activity {
   reviewCount: number
 }
 
+/**
+ * Une ligne de la liste déroulante de la barre de recherche.
+ *
+ * Délibérément plus pauvre qu'`Activity` : la barre n'affiche qu'un titre et sa
+ * provenance. Réutiliser `Activity` ici ferait voyager prix, note et image à
+ * chaque frappe.
+ */
+export interface ActivitySuggestion {
+  slug: string
+  title: string
+  /** Libellé affiché, jamais le slug. */
+  category: string
+  region: string
+}
+
 export interface ActivityFilters {
+  /** Mot-clé de la barre de recherche. */
+  q?: string
   region?: string[]
   category?: string[]
   minPrice?: number

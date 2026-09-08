@@ -2,6 +2,8 @@ import 'dotenv/config'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { ActivityStatus, PrismaClient, UserRole } from '@prisma/client'
 import { hashPassword } from 'better-auth/crypto'
+import type { Duration } from '../lib/durations'
+import type { RegionValue } from '../lib/regions'
 
 // Le seed reprend les données qui vivaient dans lib/hooks/useActivities.ts.
 // À partir d'ici, la base fait autorité : le mock sera supprimé au lot 4.
@@ -79,8 +81,11 @@ type SeedActivity = {
   slug: string
   title: string
   category: string
-  region: string
-  duration: string
+  // Listes fermées, comme à la saisie : le seed avait laissé entrer `Full day`
+  // et `Half day` à côté de `Journée`, deux vocabulaires que le filtre de durée
+  // ne pouvait pas réconcilier. Le typechecker refuse maintenant la rechute.
+  region: RegionValue
+  duration: Duration
   priceHt: number
   imageUrl: string
   rating: number
@@ -89,18 +94,18 @@ type SeedActivity = {
 }
 
 const ACTIVITIES: SeedActivity[] = [
-  { slug: 'catamaran-cruise-ile-aux-cerfs', title: 'Catamaran Cruise to Ile aux Cerfs', category: 'Water Sports', region: 'East', duration: 'Full day', priceHt: 89, imageUrl: '/images/regions/east.jpg', rating: 4.8, lang: ['EN', 'FR', 'DE'], maxParticipants: 20 },
-  { slug: 'le-morne-hiking-tour', title: 'Le Morne Mountain Hiking Tour', category: 'Nature', region: 'West', duration: 'Half day', priceHt: 65, imageUrl: '/images/regions/west.jpg', rating: 4.9, lang: ['EN', 'FR'], maxParticipants: 12 },
+  { slug: 'catamaran-cruise-ile-aux-cerfs', title: 'Catamaran Cruise to Ile aux Cerfs', category: 'Water Sports', region: 'East', duration: 'Journée', priceHt: 89, imageUrl: '/images/regions/east.jpg', rating: 4.8, lang: ['EN', 'FR', 'DE'], maxParticipants: 20 },
+  { slug: 'le-morne-hiking-tour', title: 'Le Morne Mountain Hiking Tour', category: 'Nature', region: 'West', duration: 'Demi-journée', priceHt: 65, imageUrl: '/images/regions/west.jpg', rating: 4.9, lang: ['EN', 'FR'], maxParticipants: 12 },
   { slug: 'grand-baie-sunset-cruise', title: 'Grand Baie Sunset Cruise', category: 'Cruises', region: 'North', duration: '< 2h', priceHt: 55, imageUrl: '/images/regions/north.jpg', rating: 4.7, lang: ['EN', 'FR', 'DE', 'ES'], maxParticipants: 30 },
-  { slug: 'black-river-gorges-trek', title: 'Black River Gorges Trekking', category: 'Nature', region: 'Centre', duration: 'Full day', priceHt: 75, imageUrl: '/images/regions/centre.jpg', rating: 4.6, lang: ['EN', 'FR'], maxParticipants: 10 },
-  { slug: 'gris-gris-coastal-tour', title: 'Gris Gris Coastal Discovery', category: 'Tours', region: 'South', duration: 'Half day', priceHt: 45, imageUrl: '/images/regions/south.jpg', rating: 4.5, lang: ['EN', 'FR'], maxParticipants: 16 },
-  { slug: 'dolphin-swimming-adventure', title: 'Dolphin Swimming Adventure', category: 'Water Sports', region: 'West', duration: 'Half day', priceHt: 95, imageUrl: '/images/regions/west.jpg', rating: 4.9, lang: ['EN', 'FR', 'DE'], maxParticipants: 12 },
+  { slug: 'black-river-gorges-trek', title: 'Black River Gorges Trekking', category: 'Nature', region: 'Centre', duration: 'Journée', priceHt: 75, imageUrl: '/images/regions/centre.jpg', rating: 4.6, lang: ['EN', 'FR'], maxParticipants: 10 },
+  { slug: 'gris-gris-coastal-tour', title: 'Gris Gris Coastal Discovery', category: 'Tours', region: 'South', duration: 'Demi-journée', priceHt: 45, imageUrl: '/images/regions/south.jpg', rating: 4.5, lang: ['EN', 'FR'], maxParticipants: 16 },
+  { slug: 'dolphin-swimming-adventure', title: 'Dolphin Swimming Adventure', category: 'Water Sports', region: 'West', duration: 'Demi-journée', priceHt: 95, imageUrl: '/images/regions/west.jpg', rating: 4.9, lang: ['EN', 'FR', 'DE'], maxParticipants: 12 },
   { slug: 'port-louis-cultural-tour', title: 'Port Louis Cultural Walking Tour', category: 'Culture', region: 'North', duration: '< 2h', priceHt: 35, imageUrl: '/images/regions/north.jpg', rating: 4.4, lang: ['EN', 'FR', 'ES'], maxParticipants: 18 },
-  { slug: 'mauritius-food-tour', title: 'Street Food Culinary Experience', category: 'Food & Drink', region: 'North', duration: 'Half day', priceHt: 60, imageUrl: '/images/regions/north.jpg', rating: 4.8, lang: ['EN', 'FR'], maxParticipants: 14 },
+  { slug: 'mauritius-food-tour', title: 'Street Food Culinary Experience', category: 'Food & Drink', region: 'North', duration: 'Demi-journée', priceHt: 60, imageUrl: '/images/regions/north.jpg', rating: 4.8, lang: ['EN', 'FR'], maxParticipants: 14 },
   { slug: 'quad-biking-south', title: 'Quad Biking South Coast', category: 'Adventure', region: 'South', duration: '< 2h', priceHt: 85, imageUrl: '/images/regions/south.jpg', rating: 4.6, lang: ['EN', 'FR', 'DE'], maxParticipants: 8 },
-  { slug: 'spa-wellness-retreat', title: 'Luxury Spa & Wellness Day', category: 'Wellness', region: 'East', duration: 'Full day', priceHt: 150, imageUrl: '/images/regions/east.jpg', rating: 4.9, lang: ['EN', 'FR', 'DE', 'RU'], maxParticipants: 6 },
+  { slug: 'spa-wellness-retreat', title: 'Luxury Spa & Wellness Day', category: 'Wellness', region: 'East', duration: 'Journée', priceHt: 150, imageUrl: '/images/regions/east.jpg', rating: 4.9, lang: ['EN', 'FR', 'DE', 'RU'], maxParticipants: 6 },
   { slug: 'underwater-sea-walk', title: 'Underwater Sea Walk Experience', category: 'Water Sports', region: 'North', duration: '< 2h', priceHt: 75, imageUrl: '/images/regions/north.jpg', rating: 4.7, lang: ['EN', 'FR'], maxParticipants: 10 },
-  { slug: 'chamarel-seven-colored-earth', title: 'Chamarel Seven Colored Earth Tour', category: 'Nature', region: 'South', duration: 'Half day', priceHt: 50, imageUrl: '/images/regions/south.jpg', rating: 4.5, lang: ['EN', 'FR', 'DE', 'ES'], maxParticipants: 20 },
+  { slug: 'chamarel-seven-colored-earth', title: 'Chamarel Seven Colored Earth Tour', category: 'Nature', region: 'South', duration: 'Demi-journée', priceHt: 50, imageUrl: '/images/regions/south.jpg', rating: 4.5, lang: ['EN', 'FR', 'DE', 'ES'], maxParticipants: 20 },
   { slug: 'rent-mini-cooper-cabriolet', title: 'Location Mini Cooper S Cabriolet', category: 'Véhicules', region: 'North', duration: 'Journée', priceHt: 120, imageUrl: '/images/vehicles/mini_cooper_1775498487622.png', rating: 4.8, lang: ['EN', 'FR'], maxParticipants: 4 },
   { slug: 'rent-jeep-wrangler', title: 'Location Jeep Wrangler 4x4', category: 'Véhicules', region: 'South', duration: 'Plusieurs jours', priceHt: 150, imageUrl: '/images/vehicles/jeep_wrangler_1775498501364.png', rating: 4.9, lang: ['EN', 'FR', 'DE'], maxParticipants: 5 },
   { slug: 'rent-toyota-hilux', title: 'Toyota Hilux Double Cab', category: 'Véhicules', region: 'East', duration: 'Plusieurs jours', priceHt: 110, imageUrl: '/images/vehicles/jeep_wrangler_1775498501364.png', rating: 4.5, lang: ['EN', 'FR'], maxParticipants: 5 },
@@ -357,7 +362,8 @@ async function main() {
     })
 
     // 14 jours de créneaux, à des horaires locaux mauriciens.
-    const hours = a.duration === 'Full day' || a.duration === 'Plusieurs jours' ? [9] : [9, 14]
+    // Une activité qui occupe la journée n'a qu'un départ ; les autres en ont deux.
+    const hours = a.duration === 'Journée' || a.duration === 'Plusieurs jours' ? [9] : [9, 14]
     for (let day = 1; day <= 14; day++) {
       for (const hour of hours) {
         const startsAt = mauritiusTime(day, hour)
