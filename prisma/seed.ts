@@ -239,6 +239,150 @@ function operatorKeyFor(category: string): string {
   return (match ?? OPERATORS[1]).key
 }
 
+// ---------------------------------------------------------------------------
+// Guides éditoriaux
+// ---------------------------------------------------------------------------
+//
+// « Quand partir », « Choisir sa région » et « Informations pratiques » étaient
+// trois tableaux de constantes DANS le composant `app/(public)/guide/page.tsx`.
+// Le back-office annonçait les guides comme administrables ; ces trois-là ne
+// l'étaient pas, et les modifier demandait un déploiement.
+//
+// Ce sont maintenant des articles ordinaires. Ils entrent par le seed pour que
+// la page ne naisse pas vide, mais rien ne les distingue ensuite d'un article
+// écrit depuis `/admin/guides` : ils s'éditent et se suppriment comme les
+// autres.
+//
+// Les catégories de guides, elles, n'avaient jamais été semées du tout — ni par
+// le lot 14 ni par sa migration. `/admin/guides/nouveau` proposait donc une
+// liste de catégories vide, dans laquelle aucun article n'était créable.
+
+const GUIDE_CATEGORIES = [
+  { slug: 'quand-partir', label: 'Quand partir', position: 1 },
+  { slug: 'regions', label: 'Régions', position: 2 },
+  { slug: 'pratique', label: 'Informations pratiques', position: 3 },
+] as const
+
+type SeedGuide = {
+  slug: string
+  categorySlug: (typeof GUIDE_CATEGORIES)[number]['slug']
+  title: string
+  excerpt: string
+  imageUrls: string[]
+  content: string
+}
+
+// Les liens vers le catalogue portent la valeur STOCKÉE de la région
+// (`?region=North`), jamais le libellé français : c'est ce que `publicWhere`
+// compare. Un lien écrit `?region=Nord` afficherait une page vide.
+const GUIDES: SeedGuide[] = [
+  {
+    slug: 'quand-partir-a-l-ile-maurice',
+    categorySlug: 'quand-partir',
+    title: 'Quand partir à l’île Maurice',
+    excerpt:
+      "Deux saisons, deux ambiances : l'hiver austral sec et frais de mai à novembre, l'été chaud et humide de décembre à avril. Ce qu'il faut savoir pour choisir sa période.",
+    imageUrls: ['/images/regions/west.jpg'],
+    content: `L'île Maurice se visite toute l'année, mais pas de la même façon selon la saison. Il n'y a pas de mauvaise période — seulement des périodes qui conviennent à des séjours différents.
+
+## Mai à novembre — l'hiver austral
+
+Saison sèche, 20 à 25 °C, peu de pluie. La meilleure période pour la randonnée et les excursions à la journée : la chaleur reste supportable même en plein effort, et les sentiers ne sont pas détrempés.
+
+C'est aussi la **haute saison**. Les créneaux partent vite, en particulier sur les sorties en mer du matin. Réservez tôt.
+
+- Randonnée et trekking dans leurs meilleures conditions
+- Vent régulier sur la côte est, apprécié des kitesurfeurs
+- Températures agréables pour visiter l'intérieur des terres
+
+[Voir les activités de plein air](/activities?category=nature)
+
+## Décembre à avril — l'été austral
+
+Chaud et humide, 25 à 33 °C, averses courtes mais intenses — elles passent en général en moins d'une heure. L'eau du lagon est à sa température la plus agréable de l'année, ce qui en fait la période idéale pour tout ce qui se passe dans l'eau.
+
+Le **risque cyclonique** court de janvier à mars. Il ne doit pas dissuader de venir, mais il impose de surveiller les alertes de la station météorologique et de prévoir des activités de repli.
+
+- Température de l'eau maximale pour la plongée et le snorkeling
+- Fruits de saison : litchis en décembre, mangues en janvier
+- Tarifs plus doux hors des fêtes de fin d'année
+
+[Voir les activités nautiques](/activities?category=sports-nautiques)
+
+## En résumé
+
+Si votre séjour tourne autour de la marche et des visites, visez l'hiver austral. S'il tourne autour du lagon, l'été austral vous servira mieux. Dans les deux cas, les activités de notre catalogue tournent à l'année.`,
+  },
+  {
+    slug: 'choisir-sa-region',
+    categorySlug: 'regions',
+    title: 'Choisir sa région',
+    excerpt:
+      "Nord animé, Ouest photogénique, Sud sauvage, Est turquoise, Centre méconnu : les cinq régions de l'île n'offrent pas le même séjour. De quoi choisir où poser ses valises.",
+    imageUrls: ['/images/regions/north.jpg'],
+    content: `L'île fait 65 km du nord au sud : on peut loger n'importe où et rayonner. Mais la région où l'on dort décide de ce qu'on fait le matin sans prendre la voiture, et les cinq n'ont pas du tout le même caractère.
+
+## Nord
+
+La côte la plus animée : Grand Baie, ses restaurants et ses départs en mer. C'est là qu'on trouve le plus de croisières et de sports nautiques, et la vie continue après le coucher du soleil.
+
+[Voir les activités du Nord](/activities?region=North)
+
+## Ouest
+
+Le Morne, Tamarin, les dauphins au petit matin. Couchers de soleil et lagons calmes, avec les plus belles randonnées de l'île à portée de voiture.
+
+[Voir les activités de l'Ouest](/activities?region=West)
+
+## Sud
+
+La côte sauvage, moins fréquentée : falaises de Gris Gris, terres colorées de Chamarel, forêts des gorges. À privilégier pour la nature et les paysages.
+
+[Voir les activités du Sud](/activities?region=South)
+
+## Est
+
+Les lagons turquoise et l'Île aux Cerfs. Plus venteux, donc apprécié des kitesurfeurs, et plus tranquille que le Nord.
+
+[Voir les activités de l'Est](/activities?region=East)
+
+## Centre
+
+Les hauts plateaux, plus frais de quelques degrés. Curepipe, les lacs sacrés, les points de vue — l'intérieur qu'on oublie souvent en restant sur la côte.
+
+[Voir les activités du Centre](/activities?region=Centre)`,
+  },
+  {
+    slug: 'informations-pratiques',
+    categorySlug: 'pratique',
+    title: 'Informations pratiques',
+    excerpt:
+      "Décalage horaire, langues, monnaie, déplacements, santé : les repères à avoir en tête avant de préparer son séjour à l'île Maurice.",
+    imageUrls: ['/images/regions/south.jpg'],
+    content: `## Décalage horaire
+
+UTC+4 toute l'année. L'île n'observe **aucun changement d'heure** : les horaires affichés sur ce site sont ceux de Maurice, pas ceux de votre navigateur. Un départ annoncé à 09:00 est un départ à 09:00 sur place.
+
+## Langues
+
+Le créole mauricien au quotidien, le français très largement compris, l'anglais pour l'administration. La plupart de nos activités sont proposées en français et en anglais, certaines en allemand, espagnol ou russe — le détail figure sur chaque fiche.
+
+## Monnaie
+
+La roupie mauricienne (MUR). Les prix de ce site sont affichés **en euros**. Les cartes bancaires sont acceptées presque partout ; gardez un peu d'espèces pour les marchés et les petits commerces.
+
+## Se déplacer
+
+Louer un véhicule reste le moyen le plus simple de circuler : les distances sont courtes mais les transports en commun lents. **On roule à gauche**, héritage britannique, et le permis international est recommandé.
+
+[Voir les locations de véhicules](/activities?category=vehicules)
+
+## Santé
+
+Aucun vaccin obligatoire. Prévoyez une protection solaire élevée : l'ensoleillement est fort toute l'année, y compris par temps couvert. L'eau du robinet est traitée, mais l'eau en bouteille reste l'usage courant.`,
+  },
+]
+
 async function main() {
   console.log('→ Seed MauriExplore')
 
@@ -377,8 +521,44 @@ async function main() {
     }
   }
 
+  // Catégories de guides puis articles. `update: {}` sur les deux, comme pour
+  // le catalogue : relancer le seed ne doit pas écraser un texte retouché
+  // depuis /admin/guides, ni ressusciter un article supprimé volontairement…
+  // sauf qu'un article supprimé, lui, reviendra — l'upsert porte sur le slug.
+  // C'est le comportement voulu pour du contenu de démarrage.
+  const guideCategoryIdBySlug = new Map<string, string>()
+  for (const c of GUIDE_CATEGORIES) {
+    const created = await db.guideCategory.upsert({
+      where: { slug: c.slug },
+      update: {},
+      create: { slug: c.slug, label: c.label, position: c.position },
+    })
+    guideCategoryIdBySlug.set(c.slug, created.id)
+  }
+
+  for (const g of GUIDES) {
+    const categoryId = guideCategoryIdBySlug.get(g.categorySlug)!
+    await db.guide.upsert({
+      where: { slug: g.slug },
+      update: {},
+      create: {
+        slug: g.slug,
+        categoryId,
+        title: g.title,
+        excerpt: g.excerpt,
+        content: g.content,
+        imageUrls: g.imageUrls,
+        // Publiés d'emblée : ils remplacent des blocs qui étaient déjà en
+        // ligne. Les laisser en brouillon viderait la page du guide.
+        status: 'published',
+      },
+    })
+  }
+
   console.log(`  activités: ${ACTIVITIES.length}`)
   console.log(`  créneaux: ${slotCount}`)
+  console.log(`  catégories de guides: ${GUIDE_CATEGORIES.length}`)
+  console.log(`  articles: ${GUIDES.length}`)
   console.log('✓ Seed terminé')
 
   // Récapitulatif des comptes prédéfinis. Construit à partir des mêmes
