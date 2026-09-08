@@ -4,6 +4,10 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Calendar, Users, Loader2, Phone } from 'lucide-react'
+import {
+  BOOKING_STATUS_LABEL,
+  BOOKING_STATUS_STYLE,
+} from '@/lib/booking-status'
 import { useTRPC } from '@/lib/trpc/client'
 import type { Booking, BookingStatus } from '@/types/cart'
 
@@ -12,29 +16,17 @@ import type { Booking, BookingStatus } from '@/types/cart'
 // Les deux pages en affichaient chacune leur copie : le bouton d'annulation
 // n'aurait été ajouté qu'à l'une des deux, et les libellés de statut auraient
 // divergé au premier changement.
-
-const STATUS_STYLES: Record<BookingStatus, string> = {
-  confirmed: 'bg-green-100 text-green-800',
-  pending_payment: 'bg-amber-100 text-amber-800',
-  completed: 'bg-blue-100 text-blue-800',
-  cancelled: 'bg-red-100 text-red-800',
-  expired: 'bg-muted/20 text-muted',
-}
-
-const STATUS_LABELS: Record<BookingStatus, string> = {
-  confirmed: 'Confirmée',
-  pending_payment: 'En attente de paiement',
-  completed: 'Terminée',
-  cancelled: 'Annulée',
-  expired: 'Expirée',
-}
+//
+// Les libellés eux-mêmes viennent de `lib/booking-status.ts` : ils étaient
+// encore recopiés ici, dans /admin/bookings et dans /operator/bookings — trois
+// tables qui ne disaient pas la même chose du même état.
 
 function StatusBadge({ status }: { status: BookingStatus }) {
   return (
     <span
-      className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${STATUS_STYLES[status]}`}
+      className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${BOOKING_STATUS_STYLE[status]}`}
     >
-      {STATUS_LABELS[status]}
+      {BOOKING_STATUS_LABEL[status]}
     </span>
   )
 }
