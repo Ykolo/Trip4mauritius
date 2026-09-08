@@ -8,6 +8,7 @@ import {
   createOperatorSchema,
   moveCategorySchema,
   resetFeatureSchema,
+  setBookingStatusSchema,
   setCategoryActiveSchema,
   setFeatureSchema,
   setOperatorWhatsappSchema,
@@ -41,6 +42,7 @@ import {
   getOverview,
   listBookingsForAdmin,
   listOperators,
+  setBookingStatus,
   setOperatorWhatsapp,
 } from '@/server/services/admin'
 import {
@@ -128,6 +130,13 @@ export const adminRouter = createTRPCRouter({
   bookings: adminProcedure
     .input(adminBookingsSchema)
     .query(({ input }) => listBookingsForAdmin(input)),
+
+  // Fait avancer une réservation : Créée → Validée → Terminée, ou annulation.
+  // Le service revalide la transition à partir de l'état LU en base — l'écran
+  // ne propose que le permis, mais la procédure reste appelable directement.
+  setBookingStatus: adminProcedure
+    .input(setBookingStatusSchema)
+    .mutation(({ input }) => setBookingStatus(input)),
 
   // Catalogue.
   //

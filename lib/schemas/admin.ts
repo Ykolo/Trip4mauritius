@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ADMIN_SETTABLE_STATUSES } from '@/lib/booking-status'
 import { FEATURE_KEYS, type FeatureKey } from '@/lib/features'
 import { activityInputSchema } from '@/lib/schemas/operator'
 import { isUsableWhatsAppNumber } from '@/lib/whatsapp'
@@ -40,6 +41,17 @@ export const setOperatorWhatsappSchema = z.object({
   whatsapp,
 })
 
+// La cible est bornée par `ADMIN_SETTABLE_STATUSES`, la MÊME liste qui type les
+// transitions et dessine les boutons de l'écran. Recopier les quatre valeurs
+// ici aurait créé une troisième liste, et c'est toujours la même histoire.
+//
+// Le contrôle de la transition elle-même (d'où vers où) vit dans le service,
+// qui seul connaît l'état de départ.
+export const setBookingStatusSchema = z.object({
+  bookingId: z.string().min(1),
+  status: z.enum(ADMIN_SETTABLE_STATUSES),
+})
+
 // La clé est validée contre le REGISTRE, pas contre `z.string()` : une clé
 // inventée est refusée à la frontière plutôt que d'écrire en base une ligne
 // que la résolution ignorera ensuite en silence.
@@ -67,6 +79,7 @@ export const adminBookingsSchema = z.object({
   status: z
     .enum([
       'all',
+      'pending_validation',
       'pending_payment',
       'confirmed',
       'cancelled',

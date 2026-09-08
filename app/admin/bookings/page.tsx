@@ -2,8 +2,13 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { Clock, Mail, MessageCircle, Phone, Search } from 'lucide-react'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Check, Clock, Loader2, Mail, MessageCircle, Phone, Search, X } from 'lucide-react'
+import {
+  ADMIN_STATUS_TRANSITIONS,
+  BOOKING_STATUS_LABEL,
+  BOOKING_STATUS_STYLE,
+} from '@/lib/booking-status'
 import { useTRPC } from '@/lib/trpc/client'
 import { formatEUR } from '@/lib/format'
 import { mauritiusDateTime } from '@/lib/datetime'
@@ -24,35 +29,21 @@ import type { BookingStatus } from '@/types/cart'
 // manuelle, l'admin devait ouvrir la base pour retrouver un numéro. Chaque
 // ligne porte donc les deux contacts, cliquables.
 
-const STATUS_LABEL: Record<BookingStatus, string> = {
-  pending_payment: 'En attente',
-  confirmed: 'Confirmée',
-  cancelled: 'Annulée',
-  expired: 'Expirée',
-  completed: 'Terminée',
-}
-
-const STATUS_STYLE: Record<BookingStatus, string> = {
-  pending_payment: 'bg-amber-100 text-amber-700',
-  confirmed: 'bg-green-100 text-green-700',
-  cancelled: 'bg-red-100 text-red-700',
-  expired: 'bg-muted/20 text-muted',
-  completed: 'bg-blue-100 text-blue-700',
-}
-
 const PERIODS = [
   { value: 'upcoming', label: 'À venir' },
   { value: 'past', label: 'Passées' },
   { value: 'all', label: 'Toutes' },
 ] as const
 
+// Les libellés reprennent ceux de `lib/booking-status.ts` : un filtre qui
+// nommerait un état autrement que la pastille de la carte est un piège.
 const STATUSES = [
   { value: 'all', label: 'Tous statuts' },
-  { value: 'confirmed', label: 'Confirmées' },
-  { value: 'pending_payment', label: 'En attente' },
-  { value: 'cancelled', label: 'Annulées' },
-  { value: 'completed', label: 'Terminées' },
-  { value: 'expired', label: 'Expirées' },
+  { value: 'pending_validation', label: BOOKING_STATUS_LABEL.pending_validation },
+  { value: 'confirmed', label: BOOKING_STATUS_LABEL.confirmed },
+  { value: 'completed', label: BOOKING_STATUS_LABEL.completed },
+  { value: 'cancelled', label: BOOKING_STATUS_LABEL.cancelled },
+  { value: 'expired', label: BOOKING_STATUS_LABEL.expired },
 ] as const
 
 /** Contact cliquable. Un numéro qu'il faut recopier à la main ne sert à rien. */
@@ -89,29 +80,154 @@ function Contact({
 }
 
 /**
- * Message pré-rempli de la conversation WhatsApp.
+ * Messages pré-remplis des deux conversations.
  *
- * L'opérateur reçoit des messages de plusieurs plateformes : ouvrir sur un
- * « Bonjour » nu l'obligerait à demander de quelle réservation il s'agit. La
- * référence et le départ suffisent à la retrouver dans son propre carnet.
+ * Deux destinataires, deux textes : l'opérateur a besoin de savoir QUI vient et
+ * quand, le client de savoir que sa place est retenue. Un message unique aurait
+ * envoyé au touriste ses propres coordonnées.
+ *
+ * Dans les deux cas la référence ouvre le message : opérateur comme client
+ * reçoivent des conversations de plusieurs sources, un « Bonjour » nu les
+ * obligerait à demander de quoi il s'agit.
  */
-function whatsappMessage(booking: AdminBookingRow): string {
+function operatorMessage(booking: AdminBookingRow): string {
   return [
     `Bonjour ${booking.operatorName},`,
     `Au sujet de la réservation ${booking.bookingRef} sur Trip4mauritius :`,
     `${booking.activityTitle} — départ le ${booking.date} à ${booking.time}, ${booking.participants} participant(s).`,
     `Client : ${booking.touristName}${booking.contactPhone ? ` (${booking.contactPhone})` : ''}.`,
+    `Confirmez-vous la prise en charge ?`,
   ].join('\n')
 }
 
-function BookingCard({ booking }: { booking: AdminBookingRow }) {
-  const waLink = whatsAppLink(
-    booking.operatorWhatsapp,
-    whatsappMessage(booking),
-  )
+function touristMessage(booking: AdminBookingRow): string {
+  return [
+    `Bonjour ${booking.touristName},`,
+    `Trip4mauritius, au sujet de votre réservation ${booking.bookingRef} :`,
+    `${booking.activityTitle} — départ le ${booking.date} à ${booking.time}, ${booking.participants} participant(s).`,
+  ].join('\n')
+}
+
+/**
+ * Bouton de contact WhatsApp.
+ *
+ * `whatsAppLink` rend `null` quand le numéro manque ou n'a pas d'indicatif —
+ * on affiche alors POURQUOI, au lieu d'un lien mort qui ouvrirait WhatsApp sur
+ * « numéro invalide » et ferait croire à une panne.
+ *
+ * Aucune connexion n'est nécessaire : `wa.me` ouvre simplement la conversation
+ * avec le numéro, message pré-rempli, dans l'application déjà installée.
+ */
+function WhatsAppButton({
+  phone,
+  message,
+  label,
+  missingHint,
+}: {
+  phone: string | null
+  message: string
+  label: string
+  missingHint: string
+}) {
+  const link = whatsAppLink(phone, message)
+
+  if (!link) {
+    return (
+      <span
+        title={missingHint}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted/15 text-muted text-xs font-medium cursor-not-allowed"
+      >
+        <MessageCircle className="w-3.5 h-3.5" />
+        Pas de WhatsApp
+      </span>
+    )
+  }
 
   return (
+    <a
+      href={link}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#25D366] text-white text-xs font-semibold hover:brightness-95 transition"
+    >
+      <MessageCircle className="w-3.5 h-3.5" />
+      {label}
+    </a>
+  )
+}
+
+/**
+ * Boutons de transition, dessinés à partir de `ADMIN_STATUS_TRANSITIONS`.
+ *
+ * L'écran ne connaît AUCUNE règle : il lit la table et affiche ce qu'elle
+ * autorise depuis l'état courant. Le serveur revalide la même table. Une liste
+ * écrite ici aurait fini par proposer un bouton que la procédure rejette.
+ */
+function StatusActions({ booking }: { booking: AdminBookingRow }) {
+  const trpc = useTRPC()
+  const queryClient = useQueryClient()
+  const [error, setError] = useState<string | null>(null)
+
+  const move = useMutation(
+    trpc.admin.setBookingStatus.mutationOptions({
+      onSuccess: () => {
+        setError(null)
+        queryClient.invalidateQueries({ queryKey: trpc.admin.bookings.pathKey() })
+        // Le résumé compte les réservations « Créée » : le laisser périmé
+        // afficherait une file d'attente qu'on vient de vider.
+        queryClient.invalidateQueries({ queryKey: trpc.admin.overview.queryKey() })
+      },
+      onError: (e) => setError(e.message),
+    }),
+  )
+
+  const allowed = ADMIN_STATUS_TRANSITIONS[booking.status]
+  if (allowed.length === 0) return null
+
+  return (
+    <div className="mt-3 pt-3 border-t border-muted/10">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-muted mr-1">Faire passer à</span>
+        {allowed.map((target) => {
+          const destructive = target === 'cancelled'
+          return (
+            <button
+              key={target}
+              type="button"
+              disabled={move.isPending}
+              onClick={() =>
+                move.mutate({ bookingId: booking.id, status: target })
+              }
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition disabled:opacity-50 ${
+                destructive
+                  ? 'border border-red-200 text-red-700 hover:bg-red-50'
+                  : 'bg-primary text-white hover:brightness-95'
+              }`}
+            >
+              {move.isPending && move.variables?.status === target ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : destructive ? (
+                <X className="w-3.5 h-3.5" />
+              ) : (
+                <Check className="w-3.5 h-3.5" />
+              )}
+              {BOOKING_STATUS_LABEL[target]}
+            </button>
+          )
+        })}
+      </div>
+      {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
+    </div>
+  )
+}
+
+function BookingCard({ booking }: { booking: AdminBookingRow }) {
+  return (
     <div className="bg-white rounded-2xl shadow-card border border-muted/10 px-5 py-4">
+      {/* En-tête : UNIQUEMENT ce qui décrit la réservation.
+          Les coordonnées et les contacts sont derrière les accordéons — l'admin
+          parcourt d'abord une liste, il cherche une réservation, il n'appelle
+          personne à ce stade. */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
@@ -119,9 +235,9 @@ function BookingCard({ booking }: { booking: AdminBookingRow }) {
               {booking.bookingRef}
             </code>
             <span
-              className={`text-xs px-2 py-0.5 rounded-full ${STATUS_STYLE[booking.status]}`}
+              className={`text-xs px-2 py-0.5 rounded-full ${BOOKING_STATUS_STYLE[booking.status]}`}
             >
-              {STATUS_LABEL[booking.status]}
+              {BOOKING_STATUS_LABEL[booking.status]}
             </span>
             {booking.departed && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-muted/20 text-muted">
@@ -157,41 +273,16 @@ function BookingCard({ booking }: { booking: AdminBookingRow }) {
           <p className="text-xs text-muted">
             sur place {formatEUR(booking.balanceDueOnSite)}
           </p>
-
-          {/* Action principale du back-office : la mise en relation est
-              manuelle. Elle reste donc HORS de l'accordéon — la replier
-              obligerait à deux clics pour l'usage le plus courant.
-              `whatsAppLink` rend `null` quand le numéro manque ou n'a pas
-              d'indicatif : on affiche alors pourquoi, plutôt qu'un lien mort. */}
-          {waLink ? (
-            <a
-              href={waLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#25D366] text-white text-xs font-semibold hover:brightness-95 transition"
-            >
-              <MessageCircle className="w-3.5 h-3.5" />
-              WhatsApp opérateur
-            </a>
-          ) : (
-            <span
-              title="Renseignez le numéro WhatsApp de cet opérateur depuis /admin/operators."
-              className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted/15 text-muted text-xs font-medium cursor-not-allowed"
-            >
-              <MessageCircle className="w-3.5 h-3.5" />
-              Pas de WhatsApp
-            </span>
-          )}
         </div>
       </div>
 
-      {/* Les coordonnées repliées par défaut.
-          Chaque ligne mesurait ~180 px parce qu'elle affichait en permanence
-          deux blocs de contacts, alors que l'admin parcourt d'abord une liste :
-          il cherche une réservation, il n'appelle personne. Le nom reste sur le
-          titre de l'accordéon, donc lisible sans ouvrir. `multiple` et non
-          `single` : comparer client et opérateur est précisément le geste que
-          cet écran doit permettre, les refermer l'un l'autre le gênerait. */}
+      <StatusActions booking={booking} />
+
+      {/* Un contact par accordéon, chacun avec SON bouton.
+          `multiple` et non `single` : comparer client et opérateur est
+          précisément le geste que cet écran doit permettre, les refermer l'un
+          l'autre le gênerait. Le nom reste sur le titre, donc lisible sans
+          ouvrir. */}
       <Accordion type="multiple" className="mt-2 border-t border-muted/10">
         <AccordionItem value="tourist" className="border-muted/10">
           <AccordionTrigger className="py-2.5 hover:no-underline">
@@ -203,11 +294,17 @@ function BookingCard({ booking }: { booking: AdminBookingRow }) {
               <span className="text-ink font-medium">{booking.touristName}</span>
             </span>
           </AccordionTrigger>
-          <AccordionContent className="pb-3">
+          <AccordionContent className="pb-3 space-y-3">
             <Contact
               name={booking.touristName}
               email={booking.touristEmail}
               phone={booking.contactPhone}
+            />
+            <WhatsAppButton
+              phone={booking.contactPhone}
+              message={touristMessage(booking)}
+              label="Contacter le client"
+              missingHint="Ce client n'a pas laissé de numéro exploitable (indicatif pays manquant)."
             />
           </AccordionContent>
         </AccordionItem>
@@ -224,11 +321,17 @@ function BookingCard({ booking }: { booking: AdminBookingRow }) {
               </span>
             </span>
           </AccordionTrigger>
-          <AccordionContent className="pb-3">
+          <AccordionContent className="pb-3 space-y-3">
             <Contact
               name={booking.operatorName}
               email={booking.operatorEmail}
               phone={booking.operatorWhatsapp}
+            />
+            <WhatsAppButton
+              phone={booking.operatorWhatsapp}
+              message={operatorMessage(booking)}
+              label="Contacter l'opérateur"
+              missingHint="Renseignez le numéro WhatsApp de cet opérateur depuis /admin/operators."
             />
           </AccordionContent>
         </AccordionItem>

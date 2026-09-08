@@ -1,6 +1,7 @@
 import { TRPCError } from '@trpc/server'
 import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
+import { ACTIVE_BOOKING_STATUSES } from '@/lib/booking-status'
 import { computeBookingAmounts } from '@/lib/pricing'
 import type { BookingLineInput } from '@/lib/schemas/booking'
 import { bookingInclude, toBooking } from '@/server/mappers/booking'
@@ -22,7 +23,7 @@ import type { Booking, CreateBookingResult } from '@/types/cart'
  * gratuitement. Cette limite bloque au moins l'empilement trivial sur un
  * départ donné, et se retire proprement le jour où le paiement arrive.
  */
-const ACTIVE_STATUSES = ['pending_payment', 'confirmed'] as const
+const ACTIVE_STATUSES = ACTIVE_BOOKING_STATUSES
 
 /**
  * Référence lisible, tirée d'une SÉQUENCE Postgres.
@@ -159,10 +160,18 @@ export async function createBookings(input: {
             participants: line.participants,
             contactPhone: input.contactPhone,
             ...amounts,
-            // Sans Stripe, une réservation est confirmée d'emblée. Le jour où
-            // le paiement arrive, c'est cette valeur qui passe à
-            // `pending_payment` — la machine à états, elle, existe déjà.
-            status: 'confirmed',
+            // « Créée », pas « Validée ».
+            //
+            // La mise en relation avec l'opérateur est MANUELLE : au moment où
+            // le touriste réserve, personne n'a encore prévenu le prestataire
+            // qu'un groupe arrive. Naître `confirmed` promettait donc au client
+            // une confirmation que rien n'avait produite. C'est l'admin qui
+            // fait passer la réservation à `confirmed`, depuis
+            // /admin/bookings, une fois l'opérateur joint et d'accord.
+            //
+            // La place, elle, est bien retenue dès maintenant — c'est l'UPDATE
+            // conditionnel ci-dessus qui l'a décomptée, pas ce statut.
+            status: 'pending_validation',
           },
           include: bookingInclude,
         })

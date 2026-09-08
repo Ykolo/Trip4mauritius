@@ -106,7 +106,10 @@ export async function listOperatorActivities(
   const counts = await db.booking.groupBy({
     by: ['slotId'],
     where: {
-      status: { in: ['confirmed', 'completed'] },
+      // « Créée » compte : la place est retenue dès la réservation, bien avant
+      // que l'opérateur valide. L'exclure ferait afficher au prestataire moins
+      // de réservations que son créneau n'en a réellement.
+      status: { in: ['pending_validation', 'confirmed', 'completed'] },
       slot: { activityId: { in: activities.map((a) => a.id) } },
     },
     _count: { _all: true },

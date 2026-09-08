@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { TRPCError } from '@trpc/server'
 import { db } from '@/lib/db'
-import { listBookingsForAdmin } from '@/server/services/admin'
+import {
+  listBookingsForAdmin,
+  setBookingStatus,
+} from '@/server/services/admin'
 import { createBookings } from '@/server/services/booking'
 import { testCategoryId } from '@/server/services/test-support'
 import { createCaller } from '@/server/trpc/root'
@@ -157,12 +161,90 @@ describe('listing des réservations', () => {
       search: ctx.booking.bookingRef,
     }
 
+    // Une réservation neuve naît « Créée », pas « Validée » : la mise en
+    // relation avec l'opérateur est manuelle, personne ne l'a encore joint.
+    expect(
+      (await listBookingsForAdmin({ ...base, status: 'pending_validation' }))
+        .total,
+    ).toBe(1)
     expect(
       (await listBookingsForAdmin({ ...base, status: 'confirmed' })).total,
-    ).toBe(1)
+    ).toBe(0)
     expect(
       (await listBookingsForAdmin({ ...base, status: 'cancelled' })).total,
     ).toBe(0)
+  })
+})
+
+describe('cycle de vie des réservations', () => {
+  it('suit Créée → Validée → Terminée', async () => {
+    const ctx = await bookedDeparture('lifecycle')
+    expect(ctx.booking.status).toBe('pending_validation')
+
+    const validated = await setBookingStatus({
+      bookingId: ctx.booking.id,
+      status: 'confirmed',
+    })
+    expect(validated.status).toBe('confirmed')
+
+    const done = await setBookingStatus({
+      bookingId: ctx.booking.id,
+      status: 'completed',
+    })
+    expect(done.status).toBe('completed')
+  })
+
+  it('refuse les sauts et les retours en arrière', async () => {
+    const ctx = await bookedDeparture('jumps')
+
+    // Créée → Terminée : on ne termine pas ce qui n'a jamais été validé.
+    await expect(
+      setBookingStatus({ bookingId: ctx.booking.id, status: 'completed' }),
+    ).rejects.toBeInstanceOf(TRPCError)
+
+    await setBookingStatus({ bookingId: ctx.booking.id, status: 'confirmed' })
+
+    // Validée → Créée : une réservation dont on a prévenu l'opérateur ne se
+    // dé-valide pas d'un clic. Elle s'annule, et ça se voit.
+    await expect(
+      setBookingStatus({
+        bookingId: ctx.booking.id,
+        status: 'pending_validation',
+      }),
+    ).rejects.toBeInstanceOf(TRPCError)
+  })
+
+  it('rend les places quand l’admin annule', async () => {
+    // C'est le piège de cette mutation : `cancelBooking` libère les places,
+    // et un second chemin vers `cancelled` qui ne le ferait pas viderait
+    // l'inventaire sans jamais le revendre.
+    const ctx = await bookedDeparture('release')
+    const before = await db.activitySlot.findUniqueOrThrow({
+      where: { id: ctx.slot.id },
+    })
+    expect(before.spotsTaken).toBe(2)
+
+    await setBookingStatus({ bookingId: ctx.booking.id, status: 'cancelled' })
+
+    const after = await db.activitySlot.findUniqueOrThrow({
+      where: { id: ctx.slot.id },
+    })
+    expect(after.spotsTaken).toBe(0)
+
+    // Seconde annulation : non-opération, pas une erreur — le service sort
+    // avant l'UPDATE quand l'état demandé est déjà l'état courant. C'est ce
+    // qui protège du double-clic. Ce qui doit rester vrai, et que la suite
+    // vérifie, c'est que les places ne sont PAS rendues deux fois.
+    const again = await setBookingStatus({
+      bookingId: ctx.booking.id,
+      status: 'cancelled',
+    })
+    expect(again.status).toBe('cancelled')
+
+    const stable = await db.activitySlot.findUniqueOrThrow({
+      where: { id: ctx.slot.id },
+    })
+    expect(stable.spotsTaken).toBe(0)
   })
 })
 
