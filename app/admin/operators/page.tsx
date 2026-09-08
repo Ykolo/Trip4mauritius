@@ -2,9 +2,9 @@
 
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Loader2, MessageCircle, Plus, Store } from 'lucide-react'
+import { Check, Loader2, Plus, Store } from 'lucide-react'
 import { useTRPC } from '@/lib/trpc/client'
-import { MAURITIUS_DIAL_CODE } from '@/lib/whatsapp'
+import { PhoneInput } from '@/components/forms/PhoneInput'
 import type { AdminOperator } from '@/types/admin'
 
 // Écran opérateurs — création et listing, plus de validation.
@@ -84,25 +84,17 @@ function CreateOperatorForm({ onDone }: { onDone: () => void }) {
         </label>
 
         {/* Facultatif, mais c'est ce numéro qui alimente le bouton WhatsApp du
-            listing des réservations : sans lui le bouton reste grisé. */}
-        <label className="block md:col-span-3">
-          <span className="text-sm text-muted">
-            WhatsApp <span className="text-muted/70">(facultatif)</span>
-          </span>
-          <input
-            type="tel"
-            inputMode="tel"
-            maxLength={30}
+            listing des réservations : sans lui le bouton reste grisé.
+            L'indicatif est un SÉLECTEUR et non du texte : un numéro sans pays
+            produit un lien wa.me qui n'ouvre la conversation de personne. */}
+        <div className="md:col-span-3">
+          <PhoneInput
+            label="WhatsApp (facultatif)"
             value={whatsapp}
-            onChange={(e) => setWhatsapp(e.target.value)}
-            placeholder={`${MAURITIUS_DIAL_CODE} 5789 1234`}
-            className="mt-1 w-full h-11 px-3 rounded-xl border border-muted/30 focus:outline-none focus:ring-2 focus:ring-primary/40"
+            onChange={setWhatsapp}
+            hint="C'est ce numéro que le bouton WhatsApp des réservations composera."
           />
-          <span className="text-xs text-muted mt-1 block">
-            Format international, indicatif compris — c&apos;est ce numéro que le
-            bouton WhatsApp des réservations composera.
-          </span>
-        </label>
+        </div>
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -171,20 +163,20 @@ function WhatsappField({
 
   return (
     <div className="mt-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <MessageCircle className="w-4 h-4 text-muted shrink-0" />
-        <input
-          type="tel"
-          inputMode="tel"
-          maxLength={30}
-          value={value}
-          onChange={(e) => {
-            setValue(e.target.value)
-            setSaved(false)
-          }}
-          placeholder={`${MAURITIUS_DIAL_CODE} 5789 1234`}
-          className="flex-1 min-w-[10rem] h-9 px-3 rounded-lg border border-muted/30 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-        />
+      <PhoneInput
+        label="WhatsApp"
+        value={value}
+        onChange={(next) => {
+          setValue(next)
+          setSaved(false)
+        }}
+        error={error}
+      />
+
+      {/* Le bouton sur sa propre ligne, pas à côté du champ : `PhoneInput`
+          gagne une ligne de rappel dès qu'un numéro est saisi, et un bouton
+          aligné dessus sauterait à chaque frappe. */}
+      <div className="mt-2 flex justify-end">
         <button
           type="button"
           disabled={!dirty || save.isPending}
@@ -201,7 +193,6 @@ function WhatsappField({
           {saved && !dirty ? 'Enregistré' : 'Enregistrer'}
         </button>
       </div>
-      {error && <p className="text-xs text-red-600 mt-1.5">{error}</p>}
     </div>
   )
 }
