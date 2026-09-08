@@ -3,9 +3,17 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { Mail, Phone, Search } from 'lucide-react'
+import { Clock, Mail, MessageCircle, Phone, Search } from 'lucide-react'
 import { useTRPC } from '@/lib/trpc/client'
 import { formatEUR } from '@/lib/format'
+import { mauritiusDateTime } from '@/lib/datetime'
+import { whatsAppLink } from '@/lib/whatsapp'
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion'
 import type { AdminBookingRow } from '@/types/admin'
 import type { BookingStatus } from '@/types/cart'
 
@@ -80,10 +88,31 @@ function Contact({
   )
 }
 
+/**
+ * Message pré-rempli de la conversation WhatsApp.
+ *
+ * L'opérateur reçoit des messages de plusieurs plateformes : ouvrir sur un
+ * « Bonjour » nu l'obligerait à demander de quelle réservation il s'agit. La
+ * référence et le départ suffisent à la retrouver dans son propre carnet.
+ */
+function whatsappMessage(booking: AdminBookingRow): string {
+  return [
+    `Bonjour ${booking.operatorName},`,
+    `Au sujet de la réservation ${booking.bookingRef} sur Trip4mauritius :`,
+    `${booking.activityTitle} — départ le ${booking.date} à ${booking.time}, ${booking.participants} participant(s).`,
+    `Client : ${booking.touristName}${booking.contactPhone ? ` (${booking.contactPhone})` : ''}.`,
+  ].join('\n')
+}
+
 function BookingCard({ booking }: { booking: AdminBookingRow }) {
+  const waLink = whatsAppLink(
+    booking.operatorWhatsapp,
+    whatsappMessage(booking),
+  )
+
   return (
-    <div className="bg-white rounded-2xl shadow-card border border-muted/10 p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+    <div className="bg-white rounded-2xl shadow-card border border-muted/10 px-5 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <code className="text-sm font-semibold text-ink">
@@ -107,7 +136,14 @@ function BookingCard({ booking }: { booking: AdminBookingRow }) {
             {booking.activityTitle}
           </Link>
           <p className="text-xs text-muted mt-0.5">
-            {booking.date} à {booking.time} · {booking.participants} pers.
+            Départ {booking.date} à {booking.time} · {booking.participants} pers.
+          </p>
+          {/* Quand la réservation a été PASSÉE — à ne pas confondre avec le
+              départ juste au-dessus. Sans cette date, impossible de savoir si
+              une demande date d'une heure ou de trois semaines. */}
+          <p className="text-xs text-muted mt-0.5 flex items-center gap-1.5">
+            <Clock className="w-3 h-3 shrink-0" />
+            Commandée le {mauritiusDateTime(new Date(booking.createdAt))}
           </p>
         </div>
 
@@ -121,27 +157,82 @@ function BookingCard({ booking }: { booking: AdminBookingRow }) {
           <p className="text-xs text-muted">
             sur place {formatEUR(booking.balanceDueOnSite)}
           </p>
+
+          {/* Action principale du back-office : la mise en relation est
+              manuelle. Elle reste donc HORS de l'accordéon — la replier
+              obligerait à deux clics pour l'usage le plus courant.
+              `whatsAppLink` rend `null` quand le numéro manque ou n'a pas
+              d'indicatif : on affiche alors pourquoi, plutôt qu'un lien mort. */}
+          {waLink ? (
+            <a
+              href={waLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#25D366] text-white text-xs font-semibold hover:brightness-95 transition"
+            >
+              <MessageCircle className="w-3.5 h-3.5" />
+              WhatsApp opérateur
+            </a>
+          ) : (
+            <span
+              title="Renseignez le numéro WhatsApp de cet opérateur depuis /admin/operators."
+              className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted/15 text-muted text-xs font-medium cursor-not-allowed"
+            >
+              <MessageCircle className="w-3.5 h-3.5" />
+              Pas de WhatsApp
+            </span>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-muted/10">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted mb-1.5">
-            Client
-          </p>
-          <Contact
-            name={booking.touristName}
-            email={booking.touristEmail}
-            phone={booking.contactPhone}
-          />
-        </div>
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted mb-1.5">
-            Opérateur
-          </p>
-          <Contact name={booking.operatorName} email={booking.operatorEmail} />
-        </div>
-      </div>
+      {/* Les coordonnées repliées par défaut.
+          Chaque ligne mesurait ~180 px parce qu'elle affichait en permanence
+          deux blocs de contacts, alors que l'admin parcourt d'abord une liste :
+          il cherche une réservation, il n'appelle personne. Le nom reste sur le
+          titre de l'accordéon, donc lisible sans ouvrir. `multiple` et non
+          `single` : comparer client et opérateur est précisément le geste que
+          cet écran doit permettre, les refermer l'un l'autre le gênerait. */}
+      <Accordion type="multiple" className="mt-2 border-t border-muted/10">
+        <AccordionItem value="tourist" className="border-muted/10">
+          <AccordionTrigger className="py-2.5 hover:no-underline">
+            <span className="text-xs text-muted">
+              <span className="font-semibold uppercase tracking-wide">
+                Client
+              </span>
+              {' · '}
+              <span className="text-ink font-medium">{booking.touristName}</span>
+            </span>
+          </AccordionTrigger>
+          <AccordionContent className="pb-3">
+            <Contact
+              name={booking.touristName}
+              email={booking.touristEmail}
+              phone={booking.contactPhone}
+            />
+          </AccordionContent>
+        </AccordionItem>
+
+        <AccordionItem value="operator" className="border-muted/10">
+          <AccordionTrigger className="py-2.5 hover:no-underline">
+            <span className="text-xs text-muted">
+              <span className="font-semibold uppercase tracking-wide">
+                Opérateur
+              </span>
+              {' · '}
+              <span className="text-ink font-medium">
+                {booking.operatorName}
+              </span>
+            </span>
+          </AccordionTrigger>
+          <AccordionContent className="pb-3">
+            <Contact
+              name={booking.operatorName}
+              email={booking.operatorEmail}
+              phone={booking.operatorWhatsapp}
+            />
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
     </div>
   )
 }
@@ -227,9 +318,11 @@ export default function AdminBookingsPage() {
       {isLoading || !data ? (
         <div className="space-y-4">
           {[0, 1, 2].map((i) => (
+            // Hauteur alignée sur la carte repliée : un squelette plus haut que
+            // le contenu réel fait sauter la page au premier rendu.
             <div
               key={i}
-              className="bg-white rounded-2xl h-44 animate-pulse border border-muted/10"
+              className="bg-white rounded-2xl h-40 animate-pulse border border-muted/10"
             />
           ))}
         </div>
