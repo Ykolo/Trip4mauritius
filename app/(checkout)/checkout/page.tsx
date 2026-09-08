@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/hooks/useAuth'
 import { useCartHydrated, useCartStore, useCartTotals } from '@/lib/stores/cart'
 import { useTRPC } from '@/lib/trpc/client'
 import { SkeletonCard } from '@/components/ui/SkeletonCard'
+import type { Booking } from '@/types/cart'
 
 // Le tunnel exige un compte : `Booking.userId` n'est pas nullable, une
 // réservation appartient forcément à quelqu'un. Le parcours « invité » qui
@@ -69,7 +70,11 @@ export default function CheckoutPage() {
   const [orderSummaryOpen, setOrderSummaryOpen] = useState(false)
   const [phone, setPhone] = useState('')
   const [phoneError, setPhoneError] = useState<string | null>(null)
-  const [bookingRef, setBookingRef] = useState('')
+  // Une réservation par départ, donc une référence par départ : le panier
+  // produit N codes, pas un numéro de commande unique. On garde le titre de
+  // l'activité avec, sinon le touriste reçoit deux codes sans savoir lequel
+  // présenter à quel opérateur.
+  const [confirmed, setConfirmed] = useState<Booking[]>([])
   const [confirmedDeposit, setConfirmedDeposit] = useState(0)
 
   // Le numéro du profil ne sert que de valeur par défaut : l'utilisateur reste
@@ -81,7 +86,7 @@ export default function CheckoutPage() {
   const createBooking = useMutation(
     trpc.booking.create.mutationOptions({
       onSuccess: (result) => {
-        setBookingRef(result.bookingRef)
+        setConfirmed(result.bookings)
         setConfirmedDeposit(result.totalDeposit)
         // Le panier n'a plus lieu d'être : ses lignes sont devenues des
         // réservations. Le vider APRÈS le succès seulement — sur un échec, on
@@ -417,17 +422,36 @@ export default function CheckoutPage() {
               </motion.div>
 
               <h2 className="text-2xl font-display text-ink mb-2">
-                Réservation confirmée !
+                {confirmed.length > 1
+                  ? `${confirmed.length} réservations confirmées !`
+                  : 'Réservation confirmée !'}
               </h2>
               <p className="text-muted mb-6">
                 Votre aventure à l&apos;île Maurice vous attend
               </p>
 
-              <div className="bg-base rounded-xl px-6 py-4 inline-block mb-6">
-                <p className="text-xs text-muted mb-1">Référence</p>
-                <p className="font-mono text-xl font-bold text-ink">
-                  {bookingRef}
-                </p>
+              {/* Une carte par réservation. Chaque départ a son opérateur et
+                  sa propre référence : n'en montrer qu'une laissait le touriste
+                  sans code pour ses autres activités. */}
+              <div className="space-y-3 mb-6">
+                {confirmed.map((booking) => (
+                  <div
+                    key={booking.id}
+                    className="bg-base rounded-xl px-4 sm:px-6 py-4 text-left"
+                  >
+                    <p className="text-sm font-medium text-ink">
+                      {booking.activityTitle}
+                    </p>
+                    <p className="text-xs text-muted mb-2">
+                      {booking.date} à {booking.time} · {booking.participants}{' '}
+                      pers.
+                    </p>
+                    <p className="text-xs text-muted">Référence</p>
+                    <p className="font-mono text-lg sm:text-xl font-bold text-ink break-all">
+                      {booking.bookingRef}
+                    </p>
+                  </div>
+                ))}
               </div>
 
               <div className="border-t border-surface pt-6 mb-6 text-left">

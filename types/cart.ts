@@ -70,9 +70,18 @@ export interface Booking {
   createdAt: string
 }
 
+/**
+ * Un panier de N activités produit N réservations, donc N références.
+ *
+ * Ce contrat portait aussi un `bookingRef` au singulier — la référence de la
+ * PREMIÈRE réservation — et l'écran de confirmation n'affichait que celui-là :
+ * un panier à deux activités renvoyait le touriste avec un seul code sur deux,
+ * alors que le back-office en montrait bien deux. Le champ est retiré plutôt
+ * que corrigé : tant qu'il existe, il se relit comme « la » référence de la
+ * commande, et le prochain écran refera l'erreur. Il n'y a pas de commande ici,
+ * seulement des réservations, une par départ.
+ */
 export interface CreateBookingResult {
   bookings: Booking[]
-  /** Référence de la première réservation — celle affichée en confirmation. */
-  bookingRef: string
   totalDeposit: number
 }
