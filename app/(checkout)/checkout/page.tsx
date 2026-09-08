@@ -10,6 +10,8 @@ import { useAuth } from '@/lib/hooks/useAuth'
 import { useCartHydrated, useCartStore, useCartTotals } from '@/lib/stores/cart'
 import { useTRPC } from '@/lib/trpc/client'
 import { SkeletonCard } from '@/components/ui/SkeletonCard'
+import { PhoneInput } from '@/components/forms/PhoneInput'
+import { isUsableWhatsAppNumber } from '@/lib/whatsapp'
 import type { Booking } from '@/types/cart'
 
 // Le tunnel exige un compte : `Booking.userId` n'est pas nullable, une
@@ -100,8 +102,13 @@ export default function CheckoutPage() {
   )
 
   const handleContinue = () => {
-    if (phone.trim().length < 6) {
-      setPhoneError('Merci d’indiquer un numéro où l’opérateur peut vous joindre.')
+    // Même prédicat que celui qui décide, côté back-office, si le bouton
+    // WhatsApp est actif (`lib/whatsapp.ts`). Une longueur minimale arbitraire
+    // laissait passer des numéros que personne ne pouvait ensuite composer.
+    if (!isUsableWhatsAppNumber(phone)) {
+      setPhoneError(
+        'Merci d’indiquer un numéro complet, indicatif du pays compris.',
+      )
       return
     }
     setPhoneError(null)
@@ -224,35 +231,20 @@ export default function CheckoutPage() {
                   />
                 </div>
 
-                <div>
-                  <label
-                    htmlFor="phone"
-                    className="block text-sm font-medium text-ink mb-1"
-                  >
-                    Téléphone *
-                  </label>
-                  <input
-                    type="tel"
-                    id="phone"
-                    name="phone"
-                    autoComplete="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+230 5xxx xxxx"
-                    className={`w-full px-4 py-3 rounded-xl border ${
-                      phoneError ? 'border-red-500' : 'border-surface'
-                    } bg-base focus:outline-none focus:ring-2 focus:ring-primary/20`}
-                    required
-                  />
-                  {phoneError ? (
-                    <p className="text-red-500 text-xs mt-1">{phoneError}</p>
-                  ) : (
-                    <p className="text-xs text-muted mt-1">
-                      L&apos;opérateur l&apos;utilisera pour vous joindre en cas
-                      de météo défavorable ou de changement d&apos;horaire.
-                    </p>
-                  )}
-                </div>
+                {/* Indicatif au sélecteur, pas en texte libre.
+                    Le site s'adresse à des touristes étrangers : un Français
+                    qui tape « 06 12 34 56 78 » par réflexe produisait un numéro
+                    que personne ne peut composer depuis Maurice, et un lien
+                    WhatsApp mort côté back-office. */}
+                <PhoneInput
+                  label="Téléphone"
+                  required
+                  name="phone"
+                  value={phone}
+                  onChange={setPhone}
+                  error={phoneError}
+                  hint="L'opérateur l'utilisera pour vous joindre en cas de météo défavorable ou de changement d'horaire."
+                />
               </div>
 
               <button
@@ -342,10 +334,15 @@ export default function CheckoutPage() {
                     <p className="font-medium mb-1">
                       Le paiement en ligne n&apos;est pas encore disponible.
                     </p>
+                    {/* Ne plus promettre une confirmation que personne n'a
+                        produite : la mise en relation avec l'opérateur est
+                        manuelle, la réservation naît « Créée ». Les places, en
+                        revanche, sont bien retenues dès maintenant. */}
                     <p>
-                      Votre réservation sera confirmée immédiatement et les
-                      places vous seront attribuées. L&apos;acompte sera à régler
-                      directement auprès de l&apos;opérateur.
+                      Vos places sont retenues dès validation de cette page.
+                      Notre équipe confirme ensuite votre venue auprès de
+                      l&apos;opérateur. L&apos;acompte sera à régler directement
+                      auprès de lui.
                     </p>
                   </div>
                 </div>
@@ -423,11 +420,15 @@ export default function CheckoutPage() {
 
               <h2 className="text-2xl font-display text-ink mb-2">
                 {confirmed.length > 1
-                  ? `${confirmed.length} réservations confirmées !`
-                  : 'Réservation confirmée !'}
+                  ? `${confirmed.length} réservations enregistrées !`
+                  : 'Réservation enregistrée !'}
               </h2>
               <p className="text-muted mb-6">
-                Votre aventure à l&apos;île Maurice vous attend
+                Vos places sont retenues. Nous confirmons votre venue auprès de
+                {confirmed.length > 1
+                  ? ' chaque opérateur'
+                  : " l'opérateur"}{' '}
+                et vous tenons au courant.
               </p>
 
               {/* Une carte par réservation. Chaque départ a son opérateur et

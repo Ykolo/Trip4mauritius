@@ -37,8 +37,14 @@ export interface CartTotals {
   totalOnSite: number
 }
 
-/** Les 5 états de `BookingStatus` en base, tels quels. */
+/**
+ * Les 6 états de `BookingStatus` en base, tels quels.
+ *
+ * Libellés, couleurs et transitions autorisées vivent dans
+ * `lib/booking-status.ts` — pas ici, et surtout pas recopiés dans les écrans.
+ */
 export type BookingStatus =
+  | 'pending_validation'
   | 'pending_payment'
   | 'confirmed'
   | 'expired'

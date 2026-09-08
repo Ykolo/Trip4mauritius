@@ -3,32 +3,23 @@
 import { useState } from 'react'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, Phone } from 'lucide-react'
+import {
+  BOOKING_STATUS_LABEL,
+  BOOKING_STATUS_STYLE,
+} from '@/lib/booking-status'
 import { useTRPC } from '@/lib/trpc/client'
 import { formatEUR } from '@/lib/format'
 import type { BookingStatus } from '@/types/cart'
 
-const STATUS_STYLES: Record<BookingStatus, string> = {
-  confirmed: 'bg-green-100 text-green-700',
-  pending_payment: 'bg-amber-100 text-amber-700',
-  completed: 'bg-blue-100 text-blue-700',
-  cancelled: 'bg-red-100 text-red-600',
-  expired: 'bg-muted/20 text-muted',
-}
-
-const STATUS_LABELS: Record<BookingStatus, string> = {
-  confirmed: 'Confirmée',
-  pending_payment: 'En attente',
-  completed: 'Terminée',
-  cancelled: 'Annulée',
-  expired: 'Expirée',
-}
-
+// Libellés et couleurs viennent de `lib/booking-status.ts`. Cet écran portait
+// sa propre table : la même réservation s'y lisait « En attente » quand
+// /bookings affichait « En attente de paiement ».
 function StatusBadge({ status }: { status: BookingStatus }) {
   return (
     <span
-      className={`inline-flex px-2 py-1 text-xs font-medium rounded-full whitespace-nowrap ${STATUS_STYLES[status]}`}
+      className={`inline-flex px-2 py-1 text-xs font-medium rounded-full whitespace-nowrap ${BOOKING_STATUS_STYLE[status]}`}
     >
-      {STATUS_LABELS[status]}
+      {BOOKING_STATUS_LABEL[status]}
     </span>
   )
 }

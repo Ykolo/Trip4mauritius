@@ -1,6 +1,11 @@
 import { TRPCError } from '@trpc/server'
 import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
+import {
+  BOOKING_STATUS_LABEL,
+  canAdminMove,
+  type AdminSettableStatus,
+} from '@/lib/booking-status'
 import { mauritiusDate, mauritiusTime } from '@/lib/datetime'
 import type { AdminBookingsInput } from '@/lib/schemas/admin'
 import type { BookingStatus } from '@/types/cart'
@@ -38,7 +43,11 @@ export async function getOverview(): Promise<AdminOverview> {
     publishedGuides,
   ] = await Promise.all([
     db.activity.count({ where: { status: 'published' } }),
-    db.booking.count({ where: { status: 'pending_payment' } }),
+    // « En attente » = ce sur quoi l'admin doit AGIR : les réservations créées
+    // dont l'opérateur n'a pas encore validé la prise en charge. C'était
+    // `pending_payment`, un état que personne n'écrit tant que Stripe n'existe
+    // pas — le compteur affichait donc invariablement zéro.
+    db.booking.count({ where: { status: 'pending_validation' } }),
     db.booking.count({ where: { status: 'confirmed' } }),
     db.operator.count(),
     db.guide.count({ where: { status: 'published' } }),
@@ -140,6 +149,88 @@ export async function listBookingsForAdmin(
     total,
     pages: Math.max(1, Math.ceil(total / ROWS_PER_PAGE)),
   }
+}
+
+/**
+ * Fait avancer une réservation dans son cycle de vie, depuis le back-office.
+ *
+ * Les transitions autorisées sont déclarées UNE fois, dans
+ * `lib/booking-status.ts`, et servent aussi à dessiner les boutons de l'écran.
+ * On revalide ici quand même : l'écran ne propose que le permis, mais la
+ * procédure est appelable directement — masquer un bouton n'a jamais fermé une
+ * porte.
+ *
+ * Deux choses méritent l'attention :
+ *
+ * 1. La transition est conditionnée sur le statut LU, dans le `updateMany` —
+ *    même schéma que `cancelBooking`. Deux admins sur le même écran, ou un
+ *    double-clic, ne doivent pas appliquer deux fois la même transition : la
+ *    seconde ne trouverait plus la ligne dans l'état attendu et échouerait
+ *    proprement, au lieu de re-libérer des places déjà rendues.
+ *
+ * 2. Passer à `cancelled` REND les places, dans la même transaction. C'est la
+ *    règle de `cancelBooking`, et l'oublier ici aurait fait fuir l'inventaire
+ *    par un chemin différent : le créneau se serait rempli d'annulations sans
+ *    jamais se revendre.
+ */
+export async function setBookingStatus(input: {
+  bookingId: string
+  status: AdminSettableStatus
+}): Promise<{ id: string; status: BookingStatus }> {
+  return db.$transaction(async (tx) => {
+    const booking = await tx.booking.findUnique({
+      where: { id: input.bookingId },
+      select: {
+        id: true,
+        status: true,
+        slotId: true,
+        participants: true,
+      },
+    })
+
+    if (!booking) {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Réservation introuvable.' })
+    }
+
+    const from = booking.status as BookingStatus
+
+    if (from === input.status) {
+      return { id: booking.id, status: from }
+    }
+
+    if (!canAdminMove(from, input.status)) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: `Passage impossible de « ${BOOKING_STATUS_LABEL[from]} » à « ${BOOKING_STATUS_LABEL[input.status]} ».`,
+      })
+    }
+
+    const moved = await tx.booking.updateMany({
+      where: { id: booking.id, status: from },
+      data: { status: input.status },
+    })
+
+    if (moved.count === 0) {
+      throw new TRPCError({
+        code: 'CONFLICT',
+        message: 'Cette réservation vient de changer d’état. Rechargez la liste.',
+      })
+    }
+
+    if (input.status === 'cancelled') {
+      // Soustraction franche, sans GREATEST(0, …) : la garde de statut
+      // ci-dessus rend le double décrément impossible, et le CHECK
+      // `spotsTaken >= 0` doit rester capable de signaler une régression au
+      // lieu de l'absorber en silence.
+      await tx.$executeRaw`
+        UPDATE activity_slots
+           SET "spotsTaken" = "spotsTaken" - ${booking.participants}
+         WHERE id = ${booking.slotId}
+      `
+    }
+
+    return { id: booking.id, status: input.status }
+  })
 }
 
 // ---------------------------------------------------------------------------

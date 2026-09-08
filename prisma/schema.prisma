@@ -144,6 +144,11 @@ enum BookingStatus {
   expired
   cancelled
   completed
+  // « Créée » : réservée par le touriste, pas encore validée par l'opérateur.
+  // En FIN d'énumération parce que `ALTER TYPE ... ADD VALUE` ajoute à la fin —
+  // un ordre différent ici ferait détecter une dérive au prochain diff Prisma.
+  // Le cycle de vie complet est documenté dans `lib/booking-status.ts`.
+  pending_validation
 }
 
 model Operator {
@@ -366,7 +371,7 @@ model Booking {
   // contact de réservations déjà passées.
   contactPhone String?
 
-  status                BookingStatus @default(pending_payment)
+  status                BookingStatus @default(pending_validation)
   stripePaymentIntentId String?       @unique
   expiresAt             DateTime?
 

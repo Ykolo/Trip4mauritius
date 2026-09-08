@@ -4,6 +4,7 @@ import type {
   Booking as DbBooking,
   Operator as DbOperator,
 } from '@prisma/client'
+import { ACTIVE_BOOKING_STATUSES } from '@/lib/booking-status'
 import { mauritiusDate, mauritiusTime } from '@/lib/datetime'
 import type { Booking, BookingStatus } from '@/types/cart'
 
@@ -23,8 +24,13 @@ export type BookingWithContext = DbBooking & {
  * échoue.
  */
 export function isCancellable(booking: DbBooking, slot: DbSlot): boolean {
-  const active =
-    booking.status === 'confirmed' || booking.status === 'pending_payment'
+  // `ACTIVE_BOOKING_STATUSES` et non une liste écrite ici : une réservation
+  // « Créée » retient déjà une place, elle doit donc rester annulable. La
+  // recopier localement avait toutes les chances d'oublier le nouvel état au
+  // moment de l'ajouter — et le touriste se serait retrouvé sans bouton.
+  const active = (ACTIVE_BOOKING_STATUSES as readonly string[]).includes(
+    booking.status,
+  )
   return active && slot.startsAt.getTime() > Date.now()
 }
 
