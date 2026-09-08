@@ -37,44 +37,60 @@ export function CartItemRow({ item }: { item: CartItem }) {
     setParticipants(item.slotId, next)
   }
 
+  // Une SEULE disposition, pas une variante mobile et une variante bureau.
+  //
+  // L'ancienne rangeait vignette, texte et actions sur trois colonnes côte à
+  // côte. Sur un écran de 375 px il restait 95 px au titre une fois la vignette
+  // (80), le compteur (120) et les espacements retirés — illisible. Empiler les
+  // actions SOUS le texte tient aussi bien à 343 qu'à 1280 px, et évite d'avoir
+  // deux arbres à maintenir en parallèle.
   return (
-    <div className="rounded-2xl shadow-card bg-white p-4 flex gap-4">
-      <Link
-        href={`/activities/${item.activity.slug}`}
-        className="relative w-20 h-20 flex-shrink-0 rounded-xl overflow-hidden"
-      >
-        <Image
-          src={item.activity.imageUrl}
-          alt={item.activity.title}
-          fill
-          className="object-cover"
-        />
-      </Link>
-
-      <div className="flex-1 min-w-0">
+    <div className="rounded-2xl shadow-card bg-white p-4">
+      <div className="flex gap-3 sm:gap-4">
         <Link
           href={`/activities/${item.activity.slug}`}
-          className="font-semibold text-ink truncate block hover:text-primary transition-colors"
+          className="relative w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0 rounded-xl overflow-hidden"
         >
-          {item.activity.title}
+          <Image
+            src={item.activity.imageUrl}
+            alt={item.activity.title}
+            fill
+            sizes="80px"
+            className="object-cover"
+          />
         </Link>
-        <p className="text-muted text-sm">{item.activity.operator}</p>
-        <p className="text-sm text-muted flex items-center gap-1 mt-1">
-          <Calendar className="w-4 h-4" />
-          {formatSlotDate(item.slot.date)} à {item.slot.time}
-        </p>
-      </div>
 
-      <div className="flex flex-col items-end justify-between">
+        {/* `min-w-0` obligatoire : le titre porte `truncate`, donc
+            `white-space: nowrap`. Sans cette ligne, l'élément flexible refuse
+            de se réduire sous la largeur du titre entier et pousse la carte
+            hors de l'écran au lieu de couper le texte. */}
+        <div className="flex-1 min-w-0">
+          <Link
+            href={`/activities/${item.activity.slug}`}
+            className="font-semibold text-ink truncate block hover:text-primary transition-colors"
+          >
+            {item.activity.title}
+          </Link>
+          <p className="text-muted text-sm truncate">{item.activity.operator}</p>
+          <p className="text-sm text-muted flex items-center gap-1 mt-1">
+            <Calendar className="w-4 h-4 shrink-0" />
+            <span className="truncate">
+              {formatSlotDate(item.slot.date)} à {item.slot.time}
+            </span>
+          </p>
+        </div>
+
         <button
           onClick={() => remove(item.slotId)}
-          className="p-2 text-muted hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"
+          className="self-start -mr-1 p-2 text-muted hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 shrink-0"
           aria-label="Retirer du panier"
         >
           <Trash2 className="w-5 h-5" />
         </button>
+      </div>
 
-        <div className="flex items-center gap-2 bg-surface rounded-xl px-2 py-1">
+      <div className="mt-3 pt-3 border-t border-surface flex items-center justify-between gap-3">
+        <div className="flex items-center gap-1 sm:gap-2 bg-surface rounded-xl px-2 py-1 shrink-0">
           <button
             onClick={() => updateBy(-1)}
             disabled={item.participants <= 1}
@@ -96,8 +112,8 @@ export function CartItemRow({ item }: { item: CartItem }) {
           </button>
         </div>
 
-        <p className="text-accent font-semibold">
-          Acompte : &euro;{amounts.depositDue.toFixed(0)}
+        <p className="text-accent font-semibold text-right truncate">
+          Acompte&nbsp;: &euro;{amounts.depositDue.toFixed(0)}
         </p>
       </div>
     </div>

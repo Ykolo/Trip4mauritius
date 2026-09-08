@@ -64,7 +64,16 @@ export default function CartPage() {
         </h1>
 
         <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-          <div className="space-y-4">
+          {/* `min-w-0` n'est pas décoratif : sans lui, cette colonne garde le
+              `min-width: auto` par défaut des éléments de grille et refuse de
+              descendre sous la largeur MINIMALE de son contenu. Or le titre
+              d'activité porte `truncate`, donc `white-space: nowrap`, donc une
+              largeur minimale égale au titre entier — 679 px mesurés pour un
+              écran de 375. La piste s'étirait à 679 px et c'est la page entière
+              qui partait en défilement latéral, en-tête et récapitulatif
+              compris. Avec `min-w-0`, la colonne se plie et `truncate` fait
+              enfin ce que son nom promet. */}
+          <div className="space-y-4 min-w-0">
             {cart.items.map((item) => (
               // Le créneau est la clé : deux lignes ne peuvent pas viser le
               // même départ.
