@@ -10,6 +10,7 @@ import {
   resetFeatureSchema,
   setCategoryActiveSchema,
   setFeatureSchema,
+  setOperatorWhatsappSchema,
   updateCategorySchema,
 } from '@/lib/schemas/admin'
 import {
@@ -40,6 +41,7 @@ import {
   getOverview,
   listBookingsForAdmin,
   listOperators,
+  setOperatorWhatsapp,
 } from '@/server/services/admin'
 import {
   createCategory,
@@ -90,6 +92,18 @@ export const adminRouter = createTRPCRouter({
   createOperator: adminProcedure
     .input(createOperatorSchema)
     .mutation(({ input }) => createOperator(input)),
+
+  // Réservé à l'admin, et pas seulement par commodité : c'est le numéro que le
+  // back-office compose pour joindre le prestataire. Ouvert à l'espace
+  // opérateur, il donnerait à celui-ci le moyen de se rendre injoignable.
+  setOperatorWhatsapp: adminProcedure
+    .input(setOperatorWhatsappSchema)
+    .mutation(({ input }) =>
+      setOperatorWhatsapp({
+        operatorId: input.operatorId,
+        whatsapp: input.whatsapp ?? null,
+      }),
+    ),
 
   // Les interrupteurs sont réservés au super admin (Kled), pas à
   // l'administrateur Trip4mauritius : ils commandent ce que le client voit,

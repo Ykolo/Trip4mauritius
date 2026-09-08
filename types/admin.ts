@@ -23,6 +23,8 @@ export interface AdminOperator {
   /** Identité réelle derrière le nom commercial — réservé à l'admin. */
   userName: string
   userEmail: string
+  /** Numéro professionnel du prestataire — le bouton WhatsApp du back-office. */
+  whatsapp: string | null
   activityCount: number
   createdAt: string
 }
@@ -83,6 +85,12 @@ export interface AdminBookingRow {
   operatorId: string
   operatorName: string
   operatorEmail: string
+  /**
+   * Numéro professionnel de l'opérateur, tel que saisi — pas encore normalisé.
+   * La fabrication du lien `wa.me` vit dans `lib/whatsapp.ts`, un seul endroit.
+   * `null` tant qu'aucun numéro n'a été renseigné : le bouton se désactive.
+   */
+  operatorWhatsapp: string | null
 }
 
 export interface AdminBookingsPage {
