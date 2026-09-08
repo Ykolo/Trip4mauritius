@@ -39,7 +39,52 @@ export async function generateMetadata({
 }
 
 /**
- * Rendu minimal du Markdown : titres, paragraphes, listes.
+ * Le texte d'une ligne : gras et liens.
+ *
+ * Ajouté avec la migration des blocs « Choisir sa région » et « Quand partir »
+ * en articles : ces blocs renvoyaient vers le catalogue filtré, et sans les
+ * liens la migration aurait affiché `[Voir le Nord](/activities?region=North)`
+ * en toutes lettres au visiteur.
+ *
+ * Seuls les chemins INTERNES sont rendus en lien. Une URL externe reste du
+ * texte : l'éditeur est un formulaire d'administration, pas un endroit d'où
+ * poser un `javascript:` ou un renvoi sortant que personne n'a relu.
+ */
+function Inline({ text }: { text: string }) {
+  // Un seul passage, deux motifs : `[libellé](/chemin)` et `**gras**`.
+  const parts = text.split(/(\[[^\]]+\]\([^)]+\)|\*\*[^*]+\*\*)/g)
+
+  return (
+    <>
+      {parts.map((part, i) => {
+        const link = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(part)
+        if (link) {
+          const [, label, href] = link
+          if (!href.startsWith('/')) return <span key={i}>{label}</span>
+          return (
+            <Link key={i} href={href} className="text-primary font-medium hover:underline">
+              {label}
+            </Link>
+          )
+        }
+
+        const bold = /^\*\*([^*]+)\*\*$/.exec(part)
+        if (bold) {
+          return (
+            <strong key={i} className="font-semibold text-ink">
+              {bold[1]}
+            </strong>
+          )
+        }
+
+        return <span key={i}>{part}</span>
+      })}
+    </>
+  )
+}
+
+/**
+ * Rendu minimal du Markdown : titres, paragraphes, listes, gras et liens.
  *
  * Volontairement sans bibliothèque. Le contenu est écrit par Trip4mauritius —
  * pas par un tiers — mais il n'est PAS injecté en HTML brut pour autant : tout
@@ -78,7 +123,7 @@ function Markdown({ content }: { content: string }) {
             <ul key={i} className="list-disc pl-5 space-y-1">
               {lines.map((l, j) => (
                 <li key={j} className="text-muted leading-relaxed">
-                  {l.trim().replace(/^[-*]\s+/, '')}
+                  <Inline text={l.trim().replace(/^[-*]\s+/, '')} />
                 </li>
               ))}
             </ul>
@@ -87,7 +132,7 @@ function Markdown({ content }: { content: string }) {
 
         return (
           <p key={i} className="text-muted leading-relaxed whitespace-pre-line">
-            {trimmed}
+            <Inline text={trimmed} />
           </p>
         )
       })}

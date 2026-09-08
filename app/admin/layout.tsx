@@ -57,7 +57,18 @@ function AdminNav() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-muted/20 pb-[env(safe-area-inset-bottom)]">
-      <div className="flex items-stretch justify-around max-w-2xl mx-auto">
+      {/* `basis-0 min-w-0` sur chaque onglet, et non `flex-1` seul.
+
+          Un élément flex garde `min-width: auto` par défaut : il ne descend
+          jamais sous la largeur intrinsèque de son contenu. Avec sept onglets
+          sur un écran de 375 px, « Réglages » se retrouvait à droite 403 —
+          hors écran, et donc inatteignable puisque la barre ne défile pas.
+          C'est le même piège que la fourchette de prix du catalogue.
+
+          `basis-0` force le partage à parts égales, `min-w-0` autorise la
+          descente sous la largeur du texte, et `truncate` coupe proprement
+          plutôt que de déborder. */}
+      <div className="flex items-stretch max-w-2xl mx-auto">
         {tabs.map((tab) => {
           const active =
             tab.href === '/admin'
@@ -70,12 +81,13 @@ function AdminNav() {
               key={tab.href}
               href={tab.href}
               aria-current={active ? 'page' : undefined}
-              className={`relative flex flex-1 flex-col items-center justify-center gap-1 min-h-[56px] px-1 py-2 active:scale-95 transition-transform ${
+              title={tab.label}
+              className={`relative flex flex-1 basis-0 min-w-0 flex-col items-center justify-center gap-1 min-h-[56px] px-0.5 py-2 active:scale-95 transition-transform ${
                 active ? 'text-primary' : 'text-muted'
               }`}
             >
               <Icon className="w-5 h-5 shrink-0" />
-              <span className="text-[11px] font-medium leading-none text-center">
+              <span className="w-full text-[10px] font-medium leading-none text-center truncate">
                 {tab.label}
               </span>
               {active && (

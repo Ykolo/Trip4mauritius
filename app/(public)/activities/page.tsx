@@ -31,6 +31,7 @@ export default async function ActivitiesPage({
 
   // Les filtres passés au client suivent le type du front, pas celui de Zod.
   const initialFilters: ActivityFilters = {
+    q: filters.q,
     region: filters.region,
     category: filters.category,
     lang: filters.lang,

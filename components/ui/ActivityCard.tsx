@@ -1,5 +1,6 @@
 import Image from 'next/image'
 import Link from 'next/link'
+import { regionLabel } from '@/lib/regions'
 import type { Activity } from '@/types/activity'
 
 interface ActivityCardProps {
@@ -34,7 +35,7 @@ export function ActivityCard({ activity }: ActivityCardProps) {
             {activity.title}
           </h3>
           <p className="text-muted text-xs mb-2">
-            {activity.region} · {activity.duration}
+            {regionLabel(activity.region)} · {activity.duration}
           </p>
           
           {/* Footer — le prix seul : les avis ne sont plus affichés. */}

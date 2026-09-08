@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Search, ShoppingCart, User, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { SearchBox } from "@/components/layout/SearchBox";
 import { useCartHydrated, useCartStore } from "@/lib/stores/cart";
 
 export function TopBar() {
@@ -34,23 +35,20 @@ export function TopBar() {
           className={`flex-1 mx-4 ${isSearchOpen ? "flex" : "hidden md:flex"
             } items-center justify-center`}
         >
-          <div className="relative w-full max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-primary/60" />
-            <input
-              type="text"
-              placeholder="Rechercher une activité…"
-              className="w-full h-10 pl-10 pr-4 rounded-2xl border border-primary/20 bg-primary/5 text-ink placeholder:text-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/50 font-body text-sm"
-            />
-            {isSearchOpen && (
-              <button
-                onClick={() => setIsSearchOpen(false)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 min-w-[48px] min-h-[48px] flex items-center justify-center md:hidden active:scale-95 transition-transform"
-                aria-label="Fermer la recherche"
-              >
-                <X className="w-5 h-5 text-primary/70" />
-              </button>
-            )}
-          </div>
+          {/* Champ, suggestions et soumission vivent dans `SearchBox`. La barre
+              du haut n'en garde que le placement et, sur mobile, l'ouverture. */}
+          <SearchBox onDone={() => setIsSearchOpen(false)} />
+
+          {isSearchOpen && (
+            <button
+              type="button"
+              onClick={() => setIsSearchOpen(false)}
+              className="ml-1 min-w-[44px] min-h-[44px] flex items-center justify-center md:hidden active:scale-95 transition-transform"
+              aria-label="Fermer la recherche"
+            >
+              <X className="w-5 h-5 text-primary/70" />
+            </button>
+          )}
         </div>
 
         {/* Right: Actions */}

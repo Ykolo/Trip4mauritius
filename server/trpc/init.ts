@@ -87,7 +87,7 @@ export const protectedProcedure = t.procedure.use(async ({ ctx, next }) => {
  * aux données d'un opérateur DOIT passer par `where: { operatorId: ctx.operator.id }`.
  */
 export const operatorProcedure = protectedProcedure.use(async ({ ctx, next }) => {
-  if (ctx.user.role !== 'operator' && ctx.user.role !== 'admin') {
+  if (!['operator', 'admin', 'superadmin'].includes(ctx.user.role)) {
     throw new TRPCError({ code: 'FORBIDDEN' })
   }
 
@@ -148,7 +148,7 @@ export const superAdminProcedure = protectedProcedure.use(async ({ ctx, next }) 
  * la plateforme qui a fermé la porte. Confondre les deux enverrait un
  * utilisateur légitime se demander ce qu'il a fait de mal.
  *
- *     requestAccess: protectedProcedure.use(withFeature('operator.selfSignup'))
+ *     maProcedure: protectedProcedure.use(withFeature('ma.cle'))
  */
 export function withFeature(key: FeatureKey) {
   return t.middleware(({ ctx, next }) => {

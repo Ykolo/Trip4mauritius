@@ -49,7 +49,7 @@ async function activityInput(
     title: `${TEST_PREFIX}offre ${Math.random().toString(36).slice(2, 8)}`,
     categoryId: await testCategoryId(),
     region: 'South',
-    duration: '3 hours',
+    duration: 'Demi-journée',
     description: { fr: 'Description de test.' },
     priceHT: 60,
     maxParticipants: 8,
@@ -127,22 +127,27 @@ describe('création d\'un opérateur', () => {
     expect(after?.name).toBe('Touriste Fidèle')
   })
 
-  it('ne fabrique JAMAIS d\'administrateur et n\'en rétrograde aucun', async () => {
-    const email = testEmail('admin')
-    const admin = await db.user.create({
-      data: { email, name: 'Admin', role: 'admin' },
-    })
+  it.each(['admin', 'superadmin'] as const)(
+    'ne rétrograde JAMAIS un compte %s',
+    async (role) => {
+      // Le seul rempart : sans la liste des rôles privilégiés, créer un profil
+      // opérateur sur l'adresse du super admin lui retirerait les interrupteurs
+      // en silence, sans qu'aucun écran ne le signale.
+      const email = testEmail(role)
+      const user = await db.user.create({
+        data: { email, name: 'Privilégié', role },
+      })
 
-    await createOperator({
-      email,
-      name: 'Admin',
-      displayName: 'Société de l\'admin',
-    })
+      await createOperator({
+        email,
+        name: 'Privilégié',
+        displayName: `Société ${role}`,
+      })
 
-    const after = await db.user.findUnique({ where: { id: admin.id } })
-    // Ni promu au-dessus, ni rétrogradé en dessous.
-    expect(after?.role).toBe('admin')
-  })
+      const after = await db.user.findUnique({ where: { id: user.id } })
+      expect(after?.role).toBe(role)
+    },
+  )
 
   it('refuse un compte déjà opérateur', async () => {
     const email = testEmail('doublon')

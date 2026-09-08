@@ -72,11 +72,38 @@ function getPasswordStrength(password: string): {
  * `?redirect=//evil.com` renverrait l'utilisateur hors du site juste après
  * s'être authentifié.
  */
-function safeRedirect(target: string | null): string {
+function safeRedirect(target: string | null): string | null {
   if (!target || !target.startsWith('/') || target.startsWith('//')) {
-    return '/account'
+    return null
   }
   return target
+}
+
+/**
+ * Où atterrir quand aucune destination n'a été demandée.
+ *
+ * Chaque rôle arrive dans SON espace : un administrateur qui se connecte
+ * tombait sur la page de compte d'un touriste, sans réservation ni rien à y
+ * faire, et devait deviner l'existence de `/admin`.
+ *
+ * Cet aiguillage vit ici et pas dans `proxy.ts` : le proxy ne lit qu'un
+ * cookie, jamais un rôle — celui-ci vient du cache de session (5 min) et s'y
+ * fier produirait de fausses redirections à l'expiration. Le rôle utilisé ici
+ * sort de la réponse de connexion, il est donc frais par construction.
+ *
+ * `/account` reste accessible à tous : c'est un atterrissage, pas une
+ * interdiction. Un admin y garde ses propres réservations.
+ */
+function homeForRole(role: unknown): string {
+  switch (role) {
+    case 'admin':
+    case 'superadmin':
+      return '/admin'
+    case 'operator':
+      return '/operator/dashboard'
+    default:
+      return '/account'
+  }
 }
 
 function AuthFormInner({ defaultTab, variant = 'card' }: AuthFormProps) {
@@ -118,9 +145,14 @@ function AuthFormInner({ defaultTab, variant = 'card' }: AuthFormProps) {
    * nouveau cookie. Le coût d'un chargement complet est acceptable ici : ça
    * n'arrive qu'une fois, au moment de l'authentification.
    */
-  const goAfterAuth = useCallback(() => {
-    window.location.assign(redirectTo)
-  }, [redirectTo])
+  const goAfterAuth = useCallback(
+    (role?: unknown) => {
+      // Une destination explicite l'emporte toujours : elle vient du proxy,
+      // qui a mémorisé la page que l'utilisateur voulait atteindre.
+      window.location.assign(redirectTo ?? homeForRole(role))
+    },
+    [redirectTo],
+  )
 
   const handleLogin = useCallback(
     async (e: React.FormEvent) => {
@@ -128,7 +160,7 @@ function AuthFormInner({ defaultTab, variant = 'card' }: AuthFormProps) {
       setLoginError(null)
       setLoginPending(true)
 
-      const { error } = await authClient.signIn.email({
+      const { data, error } = await authClient.signIn.email({
         email: loginEmail,
         password: loginPassword,
       })
@@ -142,7 +174,9 @@ function AuthFormInner({ defaultTab, variant = 'card' }: AuthFormProps) {
         return
       }
 
-      goAfterAuth()
+      // Le rôle sort de la réponse de connexion, pas du cache de session :
+      // il est exact au moment où l'on décide de la destination.
+      goAfterAuth((data?.user as { role?: string } | undefined)?.role)
     },
     [loginEmail, loginPassword, goAfterAuth]
   )

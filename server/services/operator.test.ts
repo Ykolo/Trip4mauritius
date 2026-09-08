@@ -64,7 +64,7 @@ async function activityInput(
     title: `${TEST_PREFIX}sortie ${Math.random().toString(36).slice(2, 8)}`,
     categoryId: await testCategoryId(),
     region: 'North',
-    duration: '2 hours',
+    duration: '< 2h',
     description: { fr: 'Une sortie de test.' },
     priceHT: 80,
     maxParticipants: 12,

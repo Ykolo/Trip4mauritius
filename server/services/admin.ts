@@ -217,7 +217,13 @@ export async function createOperator(input: {
         },
       }))
 
-    if (existing && existing.role !== 'admin' && existing.role !== 'operator') {
+    // On ne RÉTROGRADE jamais. `admin` et `superadmin` conservent leur rôle :
+    // les lister ici est le seul rempart, la promotion se fait sinon en
+    // silence. Un super admin à qui on crée un profil opérateur se retrouverait
+    // sans son accès aux interrupteurs, sans qu'aucun écran ne le signale.
+    const PRIVILEGED = ['admin', 'superadmin']
+
+    if (existing && !PRIVILEGED.includes(existing.role) && existing.role !== 'operator') {
       await tx.user.update({ where: { id: user.id }, data: { role: 'operator' } })
     }
 

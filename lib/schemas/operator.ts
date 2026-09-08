@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { DURATIONS } from '@/lib/durations'
+import { REGION_VALUES } from '@/lib/regions'
 import { activityDescriptionSchema } from '@/lib/schemas/activity'
 
 // Schémas d'écriture de l'espace opérateur.
@@ -38,8 +40,13 @@ export const activityInputSchema = z.object({
   // refuse une valeur inventée. Avant, un opérateur pouvait écrire n'importe
   // quoi et son activité n'apparaissait dans aucun filtre.
   categoryId: z.string().trim().min(1),
-  region: z.string().trim().min(1),
-  duration: z.string().trim().min(1),
+  // Région et durée sont des listes FERMÉES, pas du texte libre — pour la même
+  // raison que `categoryId` ci-dessus. Laissées ouvertes, elles ont laissé la
+  // base accumuler deux vocabulaires concurrents (`Full day` à côté de
+  // `Journée`), et les activités saisies avec le mauvais n'apparaissaient dans
+  // aucun filtre. Les valeurs affichées viennent des mêmes constantes.
+  region: z.enum(REGION_VALUES),
+  duration: z.enum(DURATIONS),
   description: activityDescriptionSchema,
   // Le prix est en euros par personne. Le plafond n'est pas cosmétique : la
   // colonne est un Decimal(10,2), au-delà l'insertion échouerait en base.

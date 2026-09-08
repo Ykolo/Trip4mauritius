@@ -5,21 +5,29 @@ import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Search } from 'lucide-react'
+import { REGIONS } from '@/lib/regions'
 
 const BLUR_DATA_URL = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAAAAUH/8QAIhAAAQMDBAMBAAAAAAAAAAAAAQIDBAAFEQYSITETQVEU/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAZEQACAwEAAAAAAAAAAAAAAAABAgADESH/2gAMAwEAAhEDEEQA/8AEu5zW7dZEOMpUVbXFKccJJOEgDgD0Kz+x3e4W2E4y08RK3LQkk4z6Pz5SlKpWKxTMlROJ//Z'
 
-const REGIONS = ['Toutes les régions', 'Nord', 'Sud', 'Est', 'Ouest', 'Centre'] as const
+// Sentinelle du select : « pas de filtre de région », pas une région.
+const ALL_REGIONS = ''
 
 export function HeroSection() {
   const router = useRouter()
   const [keyword, setKeyword] = useState('')
-  const [region, setRegion] = useState<string>('Toutes les régions')
+  // La valeur du select est celle STOCKÉE en base (`North`), le libellé affiché
+  // est le français (`Nord`). Ce formulaire poussait le libellé dans l'URL : le
+  // catalogue cherchait alors une région « Nord » que la base n'a jamais
+  // contenue, et rendait une page vide.
+  const [region, setRegion] = useState<string>(ALL_REGIONS)
 
   const handleSearch = () => {
     const params = new URLSearchParams()
-    if (keyword) params.set('q', keyword)
-    if (region && region !== 'Toutes les régions') params.set('region', region)
-    router.push(`/activities?${params.toString()}`)
+    const trimmed = keyword.trim()
+    if (trimmed) params.set('q', trimmed)
+    if (region) params.set('region', region)
+    const query = params.toString()
+    router.push(query ? `/activities?${query}` : '/activities')
   }
 
   return (
@@ -63,6 +71,8 @@ export function HeroSection() {
                 placeholder="Activité ou mot-clé..."
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
+                // Taper Entrée dans un champ de recherche doit chercher.
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSearch() }}
                 className="w-full h-12 pl-10 pr-4 rounded-xl border border-border bg-base text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
@@ -74,8 +84,9 @@ export function HeroSection() {
                 onChange={(e) => setRegion(e.target.value)}
                 className="w-full h-12 px-4 rounded-xl border border-border bg-base text-ink focus:outline-none focus:ring-2 focus:ring-primary appearance-none cursor-pointer"
               >
+                <option value={ALL_REGIONS}>Toutes les régions</option>
                 {REGIONS.map((r) => (
-                  <option key={r} value={r}>{r}</option>
+                  <option key={r.value} value={r.value}>{r.label}</option>
                 ))}
               </select>
             </div>

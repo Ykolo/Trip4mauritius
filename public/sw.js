@@ -37,6 +37,14 @@ self.addEventListener("activate", (event) => {
  * nom porte un hachage de contenu, et les médias statiques. Un nom haché ne
  * peut pas devenir périmé — c'est ce qui rend le « cache-first » sûr ici, et
  * uniquement ici.
+ *
+ * ⚠️ Cette garantie vaut pour le BUILD DE PRODUCTION uniquement. En
+ * développement, Turbopack sert des chemins stables et non hachés
+ * (`/_next/static/chunks/_0ei7c.e._.js?id=…`) : le « cache-first » y fige
+ * l'ancien bundle, et toute modification d'un composant client disparaît
+ * derrière une erreur d'hydratation. C'est pour cette raison que
+ * `ServiceWorkerInit` n'enregistre ce fichier qu'en production — ne pas
+ * l'enregistrer en dev « pour tester la PWA » sans lire ce paragraphe.
  */
 function isImmutableAsset(url) {
   return (

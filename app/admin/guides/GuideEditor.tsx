@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Loader2, Trash2, X } from 'lucide-react'
+import { ImageUploadButton } from '@/components/forms/ImageUploadButton'
 import { useTRPC } from '@/lib/trpc/client'
 import type { GuideAdminDetail, GuideStatus } from '@/types/guide'
 
@@ -183,8 +184,24 @@ export function GuideEditor({ guide }: { guide?: GuideAdminDetail }) {
 
         <div>
           <span className="text-sm text-muted">Images</span>
-          {/* Des URLs, jamais des fichiers : le projet n'a aucun envoi. */}
-          <div className="flex gap-2 mt-1">
+          <p className="text-xs text-muted/80 mt-0.5">
+            La première image sert de couverture. Envoyez un fichier, ou collez
+            l’adresse d’une image déjà hébergée.
+          </p>
+
+          {/* Deux chemins, volontairement. L'envoi couvre le cas courant ; la
+              saisie d'URL reste pour les images déjà en ligne — et elle est le
+              seul chemin qui fonctionne tant que le stockage n'est pas
+              provisionné. */}
+          <div className="mt-2">
+            <ImageUploadButton
+              onUploaded={(url) =>
+                setForm((f) => ({ ...f, imageUrls: [...f.imageUrls, url] }))
+              }
+            />
+          </div>
+
+          <div className="flex gap-2 mt-3">
             <input
               type="url"
               value={imageDraft}
