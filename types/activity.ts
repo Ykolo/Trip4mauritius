@@ -1,10 +1,16 @@
-/** Les 5 états de `ActivityStatus` en base, tels quels. */
-export type ActivityStatus =
-  | 'draft'
-  | 'pending_moderation'
-  | 'published'
-  | 'rejected'
-  | 'archived'
+/**
+ * Les 3 états de `ActivityStatus` en base, tels quels.
+ *
+ * Ils étaient cinq : `pending_moderation` et `rejected` complétaient la file de
+ * modération, disparue au lot 13. Ils ont été retirés de l'énumération Postgres
+ * en même temps que d'ici — un type plus étroit que la colonne aurait menti, et
+ * un type plus large aurait fait vivre des libellés que rien ne peut atteindre.
+ *
+ * Conséquence utile : l'admin peut poser N'IMPORTE lequel des trois depuis
+ * `/admin/activities`, ce qui rend `AdminActivityStatus` exactement égal à ce
+ * type.
+ */
+export type ActivityStatus = 'draft' | 'published' | 'archived'
 
 /**
  * Comment une activité se vend.

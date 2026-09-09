@@ -138,28 +138,20 @@ Accès par `/admin`, ou depuis `/account` (le raccourci n'apparaît qu'aux admin
 
 ### Vue d'ensemble
 
-Ce qui attend une décision — activités à modérer, demandes d'opérateur — et l'état de la place de marché. Les onglets portent une **pastille** avec le nombre en attente, pour qu'une demande ne dorme pas faute d'avoir pensé à ouvrir l'écran.
+L'état de la place de marché. Il n'y a **rien qui attende une décision** : la file de modération et les demandes d'accès opérateur ont disparu au lot 13 — Trip4mauritius tient son catalogue et crée ses opérateurs lui-même.
 
 ### Saisir et corriger le catalogue
 
 `/admin/activities` est l'écran où **vous** remplissez le catalogue, pour n'importe quel opérateur. C'est ce dont la plateforme a besoin au lancement, quand aucun prestataire n'est encore autonome.
 
 - **Nouvelle activité** — choisissez d'abord **pour quel opérateur** : une fiche appartient toujours à quelqu'un, et c'est lui qui verra ses départs et ses passagers. Les opérateurs non encore vérifiés sont proposés, signalés comme tels.
-- La fiche est créée **en brouillon**. Dépliez-la (chevron) pour lui ajouter des créneaux : **sans départ à venir, la mise en ligne est refusée** — une page indexée que personne ne peut réserver ne rend service à personne.
+- La fiche est créée **en brouillon**. Dépliez-la (chevron) pour lui ajouter des créneaux : **sans départ à venir, la mise en ligne est refusée** — une page indexée que personne ne peut réserver ne rend service à personne. Une **location à la journée** fait exception : elle n'a aucun créneau par construction, et se met en ligne directement.
 - **Modifier** une fiche déjà en ligne la corrige **sans la sortir du catalogue** — et l'espace opérateur suit désormais la même règle.
-- **Retirer** repasse la fiche en brouillon.
-- **Archiver** la sort du catalogue en conservant les réservations passées. Une activité ne se supprime jamais.
-- Le **sélecteur d'opérateur** et la recherche (titre, adresse, opérateur) servent à reprendre un catalogue prestataire par prestataire.
-
-### Modérer les activités
-
-`/admin/moderation`, quatre files : **À modérer**, **En ligne**, **Refusées**, **Archivées**. Les plus anciennes soumissions d'abord — une file qui sert les dernières arrivées laisserait indéfiniment de côté les opérateurs les moins chanceux.
-
-- **Lire le contenu soumis** déplie la description, les inclus et les photos. À faire avant de décider.
-- **Publier** met l'activité au catalogue. Refusé si elle n'a aucun créneau à venir.
-- **Refuser** renvoie l'activité à son opérateur, qui peut la corriger. Depuis la file *En ligne*, le même bouton sert de **dépublication d'urgence**.
-
-Les brouillons n'apparaissent dans aucune file : tant qu'un opérateur n'a pas soumis, son travail lui appartient.
+- Le **statut** se change sur la ligne, par les trois segments **Brouillon · En ligne · Archivée**. L'état courant est celui qui est plein ; cliquez un autre segment pour l'y amener.
+  - **Brouillon** — la fiche sort du catalogue public mais reste en travail.
+  - **En ligne** — elle est visible et réservable.
+  - **Archivée** — elle sort du catalogue en conservant les réservations passées. Une activité ne se supprime **jamais**. L'archivage demande confirmation, et reste réversible : les trois segments restent cliquables.
+- Le **sélecteur d'opérateur** et la recherche (titre, adresse, opérateur) servent à reprendre un catalogue prestataire par prestataire. Le filtre par statut suit les mêmes trois états.
 
 ### Suivre les réservations
 

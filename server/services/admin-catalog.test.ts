@@ -244,9 +244,59 @@ describe('mise en ligne', () => {
       setActivityStatusForAdmin(activity.id, 'published'),
     ).rejects.toMatchObject({ code: 'CONFLICT' })
   })
+
+  it('ramène une fiche archivée en ligne, puis en brouillon', async () => {
+    const operator = await makeOperator('g')
+    const { activity } = await publishedActivity(operator.id)
+
+    // L'énumération est retombée à trois états, et l'écran les offre désormais
+    // TOUS LES TROIS sur chaque ligne — six transitions, là où deux boutons en
+    // exposaient trois. Ce que ce test fige, c'est que le graphe est complet :
+    // `ALLOWED_FROM` n'a aucune impasse, et l'archivage reste réversible.
+    //
+    // Le retour depuis l'archive est le seul chemin qui n'avait pas d'écran
+    // avant ce lot : le bouton « Mettre en ligne » se grisait sur
+    // `status === 'archived'`, et une fiche archivée par erreur n'avait plus
+    // aucun moyen de revenir.
+    expect((await setActivityStatusForAdmin(activity.id, 'archived')).status)
+      .toBe('archived')
+    expect((await setActivityStatusForAdmin(activity.id, 'published')).status)
+      .toBe('published')
+    expect((await setActivityStatusForAdmin(activity.id, 'draft')).status)
+      .toBe('draft')
+  })
 })
 
 describe('listing', () => {
+  it('porte le mode de vente sur chaque LIGNE, pas seulement sur la fiche', async () => {
+    const operator = await makeOperator('mode')
+    const draft = await createActivityForAdmin(
+      operator.id,
+      await activityInput({
+        bookingMode: 'daily',
+        duration: 'Journée',
+        durationMinutes: undefined,
+        dailyUnits: 2,
+      }),
+    )
+
+    const page = await listActivitiesForAdmin({
+      page: 1,
+      status: 'all',
+      operatorId: operator.id,
+    })
+    const row = page.activities.find((a) => a.id === draft.id)
+
+    // `bookingMode` vivait sur le DÉTAIL seulement. L'écran, lui, grise
+    // « En ligne » sur `upcomingSlots === 0` — et une location à la journée n'a
+    // aucun créneau, par construction. Les dix véhicules du lot B3 étaient donc
+    // impubliables depuis le back-office : le service les acceptait (test plus
+    // haut), le bouton ne partait jamais. La ligne doit porter de quoi faire
+    // l'exception sans tirer la fiche complète des vingt lignes de la page.
+    expect(row?.bookingMode).toBe('daily')
+    expect(row?.upcomingSlots).toBe(0)
+  })
+
   it('voit les activités de TOUS les opérateurs', async () => {
     const first = await makeOperator('g')
     const second = await makeOperator('h')

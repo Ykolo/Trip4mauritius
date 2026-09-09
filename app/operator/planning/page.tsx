@@ -19,19 +19,17 @@ import { SlotManager } from '@/components/dashboard/SlotManager'
 import type { ActivityStatus } from '@/types/activity'
 import type { OperatorActivitySummary } from '@/types/operator'
 
+// Trois états depuis le retrait de la file de modération : « En modération » et
+// « Refusée » étaient devenus des libellés qu'aucune fiche ne pouvait porter.
 const STATUS_STYLES: Record<ActivityStatus, string> = {
   draft: 'bg-muted/20 text-muted',
-  pending_moderation: 'bg-amber-100 text-amber-700',
   published: 'bg-green-100 text-green-700',
-  rejected: 'bg-red-100 text-red-600',
   archived: 'bg-muted/20 text-muted',
 }
 
 const STATUS_LABELS: Record<ActivityStatus, string> = {
   draft: 'Brouillon',
-  pending_moderation: 'En modération', // état hérité : plus personne ne l'écrit
   published: 'En ligne',
-  rejected: 'Refusée',
   archived: 'Archivée',
 }
 
@@ -110,7 +108,7 @@ function ActivityRow({ activity }: { activity: OperatorActivitySummary }) {
             <Pencil className="w-4 h-4" />
           </button>
 
-          {(activity.status === 'draft' || activity.status === 'rejected') && (
+          {activity.status === 'draft' && (
             <button
               onClick={() => submit.mutate({ activityId: activity.id })}
               disabled={submit.isPending}

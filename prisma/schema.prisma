@@ -124,11 +124,17 @@ enum UserRole {
   superadmin
 }
 
+// Trois états, et trois seulement.
+//
+// `pending_moderation` et `rejected` ont été retirés : c'étaient les deux états
+// de la file de modération, supprimée au lot 13. Plus aucun chemin d'écriture
+// ne les posait, mais la colonne pouvait encore les porter — et trois écrans
+// savaient encore les afficher. Une valeur d'énumération que rien ne produit
+// est une fonctionnalité fantôme : on la relit un an plus tard et on en déduit
+// qu'il existe une modération.
 enum ActivityStatus {
   draft
-  pending_moderation
   published
-  rejected
   // Les activités sont archivées, jamais supprimées : activities→slots est en
   // CASCADE et slots→bookings en RESTRICT, donc une suppression d'activité
   // réservée casserait sur une contrainte de clé étrangère illisible.

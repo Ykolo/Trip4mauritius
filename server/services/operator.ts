@@ -280,7 +280,11 @@ export async function publishOwnActivity(
 ): Promise<OperatorActivityDetail> {
   const existing = await ownedActivity(operatorId, activityId)
 
-  if (existing.status !== 'draft' && existing.status !== 'rejected') {
+  // `rejected` figurait ici comme second point de départ légitime : une fiche
+  // refusée par la modération repartait en soumission. Cet état a été retiré de
+  // l'énumération en même temps que la file qui le produisait — il ne reste que
+  // le brouillon.
+  if (existing.status !== 'draft') {
     throw new TRPCError({
       code: 'BAD_REQUEST',
       message: 'Seul un brouillon peut être mis en ligne.',

@@ -67,6 +67,7 @@ export function toOperatorActivitySummary(
     imageUrl: activity.imageUrls[0] ?? '',
     priceHT: activity.priceHt.toNumber(),
     status: activity.status as ActivityStatus,
+    bookingMode: activity.bookingMode,
     slotCount: activity._count?.slots ?? 0,
     bookingsCount: activity.bookingsCount ?? 0,
   }
@@ -82,7 +83,6 @@ export function toOperatorActivityDetail(
     ...toOperatorActivitySummary(activity),
     slotCount: activity.slots.length,
     duration: activity.duration,
-    bookingMode: activity.bookingMode,
     durationMinutes: activity.durationMinutes,
     dailyUnits: activity.dailyUnits,
     maxParticipants: activity.maxParticipants,

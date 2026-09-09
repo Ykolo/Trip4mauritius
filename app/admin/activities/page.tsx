@@ -4,11 +4,8 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Archive,
   ChevronDown,
   ChevronUp,
-  Eye,
-  EyeOff,
   Loader2,
   Pencil,
   Plus,
@@ -23,38 +20,48 @@ import type { AdminActivityRow } from '@/types/admin'
 
 // Gestion du catalogue par l'admin.
 //
-// Distinct de `/admin/moderation`, et pas par commodité : la modération traite
-// ce que les opérateurs SOUMETTENT (file d'attente, on accepte ou on refuse).
-// Cet écran-ci sert à SAISIR et corriger le catalogue — c'est ce dont la
-// plateforme a besoin au lancement, quand aucun opérateur n'est encore
-// autonome et que le client remplit lui-même ses séjours.
+// Il n'existe plus d'écran de modération : la file d'attente a disparu au lot
+// 13. Cet écran-ci sert à SAISIR et corriger le catalogue — c'est ce dont la
+// plateforme a besoin au lancement, quand aucun opérateur n'est encore autonome
+// et que le client remplit lui-même ses séjours.
+
+/**
+ * L'ORDRE de progression d'une fiche, et la source unique des trois listes de
+ * cet écran : le badge, le sélecteur de statut et les filtres.
+ *
+ * Il y avait cinq états, dont deux — « En modération » et « Refusée » —
+ * qu'aucune fiche ne pouvait plus porter depuis le lot 13. Ils sont sortis de
+ * l'énumération Postgres, pas seulement de cet affichage : un filtre qui ne
+ * ramène jamais rien se lit comme une panne du catalogue.
+ */
+const STATUS_ORDER = ['draft', 'published', 'archived'] as const
 
 const STATUS_STYLES: Record<ActivityStatus, string> = {
-  draft: 'bg-muted/20 text-muted',
-  pending_moderation: 'bg-amber-100 text-amber-700',
+  draft: 'bg-amber-50 text-amber-700',
   published: 'bg-green-100 text-green-700',
-  rejected: 'bg-red-100 text-red-600',
   archived: 'bg-muted/20 text-muted',
 }
 
 const STATUS_LABELS: Record<ActivityStatus, string> = {
   draft: 'Brouillon',
-  pending_moderation: 'En modération',
   published: 'En ligne',
-  rejected: 'Refusée',
   archived: 'Archivée',
 }
 
-const FILTERS = [
-  { value: 'all', label: 'Toutes' },
-  { value: 'published', label: 'En ligne' },
-  { value: 'draft', label: 'Brouillons' },
-  { value: 'pending_moderation', label: 'En modération' },
-  { value: 'rejected', label: 'Refusées' },
-  { value: 'archived', label: 'Archivées' },
-] as const
+// Le pluriel des filtres ne se dérive pas de `STATUS_LABELS` : « Archivée » →
+// « Archivées » marche, « En ligne » ne prend pas de `s`. Table explicite.
+const FILTER_LABELS: Record<(typeof STATUS_ORDER)[number], string> = {
+  draft: 'Brouillons',
+  published: 'En ligne',
+  archived: 'Archivées',
+}
 
-type StatusFilter = (typeof FILTERS)[number]['value']
+const FILTERS = [
+  { value: 'all' as const, label: 'Toutes' },
+  ...STATUS_ORDER.map((value) => ({ value, label: FILTER_LABELS[value] })),
+]
+
+type StatusFilter = 'all' | ActivityStatus
 
 function ActivityRow({ activity }: { activity: AdminActivityRow }) {
   const trpc = useTRPC()
@@ -107,13 +114,35 @@ function ActivityRow({ activity }: { activity: AdminActivityRow }) {
   }
 
   const published = activity.status === 'published'
+
   // La garde vit aussi côté serveur ; ici elle évite d'offrir un bouton dont on
   // sait déjà qu'il répondra par une erreur.
-  const publishable = activity.upcomingSlots > 0
+  //
+  // Elle ne vaut QU'EN mode créneau : une location à la journée n'a aucun
+  // départ, par construction. C'est le même écart que `assertPublishable`, et
+  // l'oublier ici griserait « En ligne » pour toujours sur les dix véhicules.
+  const publishable =
+    activity.bookingMode === 'daily' || activity.upcomingSlots > 0
+
+  // Archiver n'est pas anodin — la fiche sort du catalogue — mais reste
+  // réversible : c'est bien pourquoi la confirmation s'arrête à un `confirm()`
+  // et que les deux autres transitions n'en demandent aucune.
+  const change = (next: ActivityStatus) => {
+    if (
+      next === 'archived' &&
+      !confirm(
+        `Archiver « ${activity.title} » ? Elle sort du catalogue ; les réservations passées sont conservées.`,
+      )
+    ) {
+      return
+    }
+
+    setStatus.mutate({ activityId: activity.id, status: next })
+  }
 
   return (
     <div className="bg-white rounded-2xl shadow-card border border-muted/10 overflow-hidden">
-      <div className="p-5 flex flex-wrap items-center gap-4">
+      <div className="p-4 sm:p-5 flex flex-wrap items-center gap-4">
         <div className="flex-1 min-w-[220px]">
           <div className="flex items-center gap-2 flex-wrap mb-1">
             <h3 className="font-semibold text-ink">{activity.title}</h3>
@@ -134,7 +163,12 @@ function ActivityRow({ activity }: { activity: AdminActivityRow }) {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* `flex-wrap` : les trois segments de statut font ~250 px à eux seuls,
+            et « Voir la fiche » + les deux icônes portent l'ensemble au-delà de
+            la largeur d'un téléphone. Sans le repli, la rangée d'actions
+            débordait de la carte — la première victime étant le chevron des
+            créneaux, tout à droite. */}
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {published && (
             <Link
               href={`/activities/${activity.slug}`}
@@ -152,61 +186,57 @@ function ActivityRow({ activity }: { activity: AdminActivityRow }) {
             <Pencil className="w-4 h-4" />
           </button>
 
-          <button
-            onClick={() =>
-              setStatus.mutate({
-                activityId: activity.id,
-                // Dépublier renvoie en brouillon, pas en « refusée » : refuser
-                // est un verdict de modération adressé à un opérateur, retirer
-                // du catalogue est un geste d'édition.
-                status: published ? 'draft' : 'published',
-              })
-            }
-            disabled={
-              setStatus.isPending ||
-              activity.status === 'archived' ||
-              (!published && !publishable)
-            }
-            title={
-              !published && !publishable
-                ? 'Aucun départ à venir : ajoutez un créneau avant de mettre en ligne.'
-                : published
-                  ? 'Retirer du catalogue'
-                  : 'Mettre en ligne'
-            }
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border border-surface text-ink hover:bg-base disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {setStatus.isPending ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : published ? (
-              <EyeOff className="w-4 h-4" />
-            ) : (
-              <Eye className="w-4 h-4" />
-            )}
-            {published ? 'Retirer' : 'Mettre en ligne'}
-          </button>
+          {/* Les trois états côte à côte, plutôt que « Mettre en ligne » +
+              « Archiver » : ces deux boutons ne disaient pas dans quel état on
+              se trouvait, seulement ce qu'on pouvait en faire, et « Archivée »
+              n'avait aucun chemin de retour visible — il fallait deviner que
+              « Mettre en ligne » restait cliquable. Un segment par état rend le
+              graphe entier lisible d'un coup d'œil.
 
-          <button
-            onClick={() => {
-              // Archiver, jamais supprimer : `slots → bookings` est en RESTRICT
-              // et les réservations passées doivent rester lisibles.
-              if (
-                confirm(
-                  `Archiver « ${activity.title} » ? Elle sort du catalogue ; les réservations passées sont conservées.`,
-                )
-              ) {
-                setStatus.mutate({
-                  activityId: activity.id,
-                  status: 'archived',
-                })
-              }
-            }}
-            disabled={setStatus.isPending || activity.status === 'archived'}
-            className="p-2 text-muted hover:text-red-500 hover:bg-red-50 rounded-lg disabled:opacity-30"
-            aria-label="Archiver"
+              Des boutons et non un <select> : un `confirm()` refusé laisserait
+              le <select> sur la valeur choisie, la prop `value` inchangée ne
+              déclenchant aucun rendu pour l'y ramener. */}
+          <div
+            role="group"
+            aria-label={`Statut de ${activity.title}`}
+            className="inline-flex rounded-xl border border-surface overflow-hidden shrink-0"
           >
-            <Archive className="w-4 h-4" />
-          </button>
+            {STATUS_ORDER.map((value) => {
+              const current = activity.status === value
+              const blocked = value === 'published' && !publishable
+
+              return (
+                <button
+                  key={value}
+                  onClick={() => change(value)}
+                  disabled={current || blocked || setStatus.isPending}
+                  aria-pressed={current}
+                  title={
+                    blocked
+                      ? 'Aucun départ à venir : ajoutez un créneau avant de mettre en ligne.'
+                      : undefined
+                  }
+                  className={`px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed ${
+                    current
+                      ? 'bg-primary text-white'
+                      : blocked || setStatus.isPending
+                        ? 'bg-white text-muted/40'
+                        : 'bg-white text-muted hover:text-ink hover:bg-base'
+                  }`}
+                >
+                  {/* Le sablier sur l'état VISÉ, pas sur l'état courant : tant
+                      que la mutation vole, la ligne porte encore l'ancien
+                      statut, et c'est le segment qu'on vient de cliquer que
+                      l'œil cherche. */}
+                  {setStatus.isPending && setStatus.variables?.status === value ? (
+                    <Loader2 className="w-4 h-4 animate-spin mx-auto" />
+                  ) : (
+                    STATUS_LABELS[value]
+                  )}
+                </button>
+              )
+            })}
+          </div>
 
           <button
             onClick={() => setOpen((o) => !o)}
@@ -267,10 +297,12 @@ export default function AdminCatalogPage() {
   )
 
   return (
-    <div className="p-6 md:p-10 max-w-5xl mx-auto">
+    <div className="p-4 sm:p-6 md:p-10 max-w-5xl mx-auto">
       <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="font-body font-bold text-3xl text-ink">Catalogue</h1>
+          <h1 className="font-body font-bold text-2xl sm:text-3xl text-ink">
+            Catalogue
+          </h1>
           <p className="text-muted mt-1">
             Saisissez et corrigez les séjours de la plateforme, quel qu&apos;en
             soit l&apos;opérateur.
