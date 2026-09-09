@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, ChevronLeft, ChevronRight, Loader2, Plus, Trash2 } from 'lucide-react'
-import { ImageUploadButton } from '@/components/forms/ImageUploadButton'
+import { ImageDropzone } from '@/components/forms/ImageDropzone'
 import { useTRPC } from '@/lib/trpc/client'
 import { DURATIONS, durationLabel } from '@/lib/durations'
 import { REGIONS, REGION_VALUES } from '@/lib/regions'
@@ -15,10 +15,10 @@ import type { OperatorActivityDetail } from '@/types/operator'
 // Deux écarts avec la version précédente, tous deux dictés par le schéma réel :
 //
 // 1. La base stocke des URLs, jamais un fichier encodé en base64 — un base64 de
-//    1 Mo dans `imageUrls` serait relu à chaque affichage du catalogue. L'envoi
-//    de fichiers existe désormais (`ImageUploadButton`), mais il ne change rien
-//    à cette règle : le fichier part vers Vercel Blob et c'est son URL qui est
-//    enregistrée.
+//    1 Mo dans `imageUrls` serait relu à chaque affichage du catalogue. Les
+//    photos se déposent désormais dans une zone pointillée (`ImageDropzone`),
+//    mais cela ne change rien à cette règle : le fichier part vers Vercel Blob
+//    et c'est son URL qui est enregistrée.
 // 2. La description n'a plus de découpage court/long — la base stocke un objet
 //    multilingue. Le français est obligatoire, les autres langues sont
 //    facultatives et retombent sur lui à l'affichage.
@@ -282,8 +282,16 @@ export function ActivityForm({
             form.description.fr.trim(),
         )
       case 2:
+        // La durée ne se saisit pas de la même façon selon le mode : en
+        // créneau c'est un nombre de minutes, en journée le libellé de filtre.
+        // Exiger `form.duration` dans les deux cas bloquait l'étape 2 pour
+        // toujours en mode créneau, où le `<select>` n'existe plus.
         return (
-          form.priceHT > 0 && Boolean(form.duration) && form.languages.length > 0
+          form.priceHT > 0 &&
+          form.languages.length > 0 &&
+          (form.bookingMode === 'slot'
+            ? Boolean(form.durationMinutes && form.durationMinutes > 0)
+            : Boolean(form.duration))
         )
       case 3:
         return form.imageUrls.some((url) => url.trim())
@@ -293,10 +301,20 @@ export function ActivityForm({
   }
 
   const handleSubmit = () => {
+    // Le libellé de durée est DÉRIVÉ des minutes en mode créneau, exactement
+    // comme le fait `toActivityWriteData` côté serveur. Il n'est plus saisi :
+    // le `<select>` a laissé place à un nombre de minutes, et c'est
+    // `durationLabel` qui fait le pont — ici pour satisfaire le schéma, et là
+    // pour écrire la colonne.
+    const duration =
+      form.bookingMode === 'slot'
+        ? durationLabel(form.durationMinutes ?? 120)
+        : form.duration
+
     // Région et durée sont obligatoires — l'étape 1 et l'étape 2 refusent déjà
     // d'avancer sans elles. Le rappeler ici sort le `''` du type, et couvre le
     // jour où quelqu'un desserrera `canProceed`.
-    if (!form.region || !form.duration) return
+    if (!form.region || !duration) return
 
     // Les lignes vides des listes répétables sont retirées ici plutôt que
     // laissées au serveur : le schéma les filtre aussi, mais l'utilisateur doit
@@ -304,7 +322,7 @@ export function ActivityForm({
     const payload: ActivityInput = {
       ...form,
       region: form.region,
-      duration: form.duration,
+      duration,
       imageUrls: form.imageUrls.map((u) => u.trim()).filter(Boolean),
       included: form.included.map((i) => i.trim()).filter(Boolean),
       excluded: form.excluded.map((i) => i.trim()).filter(Boolean),
@@ -682,39 +700,19 @@ export function ActivityForm({
       {step === 3 && (
         <div className="space-y-6">
           <div>
-            <p className="text-sm text-muted mb-4">
-              Envoyez vos photos depuis votre ordinateur, ou indiquez
-              l&apos;adresse d&apos;images déjà hébergées : un chemin interne
-              (<code>/images/…</code>) ou une URL <code>https://</code>. La
-              première sert de photo de couverture.
-            </p>
+            <label className="block text-sm font-medium text-ink mb-2">
+              Photos *
+            </label>
 
-            {/* L'envoi remplit la première ligne vide de la liste plutôt que
-                d'en ajouter une : `imageUrls` démarre à `['']`, et empiler
-                sans cela laisserait une entrée vide en tête — donc une
-                couverture vide. */}
-            <div className="mb-4">
-              <ImageUploadButton
-                onUploaded={(url) =>
-                  set(
-                    'imageUrls',
-                    (() => {
-                      const next = [...form.imageUrls]
-                      const slot = next.findIndex((u) => !u.trim())
-                      if (slot === -1) next.push(url)
-                      else next[slot] = url
-                      return next
-                    })(),
-                  )
-                }
-              />
-            </div>
-
-            <RepeatableList
-              label="Photos *"
-              placeholder="/images/regions/east.jpg"
-              values={form.imageUrls}
-              onChange={(v) => set('imageUrls', v)}
+            {/* `imageUrls` démarre à `['']` — une ligne vide héritée du champ
+                répétable qu'il y avait ici. `ImageDropzone` ne rend jamais ces
+                entrées-là, et son `onChange` rend une liste déjà nettoyée :
+                c'est ce qui évite une couverture vide en tête. */}
+            <ImageDropzone
+              value={form.imageUrls}
+              onChange={(next) => set('imageUrls', next)}
+              max={10}
+              hint="La première photo sert de couverture dans le catalogue."
             />
           </div>
 

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { useTRPC } from '@/lib/trpc/client'
 import { PhoneInput } from '@/components/forms/PhoneInput'
+import { ImageDropzone } from '@/components/forms/ImageDropzone'
 import type { AdminOperator } from '@/types/admin'
 
 // Écran opérateurs — création, édition, suppression ou désactivation.
@@ -252,16 +253,19 @@ function EditOperatorForm({
         hint="Laisser vide retire le numéro : le bouton WhatsApp des réservations se grise."
       />
 
-      <label className="block">
-        <span className="text-sm text-muted">Logo (URL)</span>
-        <input
-          maxLength={500}
-          value={avatarUrl}
-          onChange={(e) => setAvatarUrl(e.target.value)}
-          placeholder="/images/operators/… ou https://…"
-          className="mt-1 w-full h-11 px-3 rounded-xl border border-muted/30 focus:outline-none focus:ring-2 focus:ring-primary/40"
-        />
-      </label>
+      <div>
+        <span className="text-sm text-muted">Logo</span>
+        <div className="mt-1">
+          {/* `''` vaut « pas de logo » : c'est ce que `updateOperator`
+              transforme en `null`, et ce que le retrait doit produire. */}
+          <ImageDropzone
+            value={avatarUrl ? [avatarUrl] : []}
+            onChange={(next) => setAvatarUrl(next[0] ?? '')}
+            max={1}
+            hint="Affiché sur la fiche publique des activités de cet opérateur."
+          />
+        </div>
+      </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 

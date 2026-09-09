@@ -4,8 +4,8 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Loader2, Trash2, X } from 'lucide-react'
-import { ImageUploadButton } from '@/components/forms/ImageUploadButton'
+import { ArrowLeft, Loader2, Trash2 } from 'lucide-react'
+import { ImageDropzone } from '@/components/forms/ImageDropzone'
 import { useTRPC } from '@/lib/trpc/client'
 import type { GuideAdminDetail, GuideStatus } from '@/types/guide'
 
@@ -40,7 +40,6 @@ export function GuideEditor({ guide }: { guide?: GuideAdminDetail }) {
   const queryClient = useQueryClient()
 
   const [form, setForm] = useState<FormState>(guide ?? EMPTY)
-  const [imageDraft, setImageDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   const { data: categories } = useQuery(
@@ -94,13 +93,6 @@ export function GuideEditor({ guide }: { guide?: GuideAdminDetail }) {
 
     if (guide) update.mutate({ guideId: guide.id, data })
     else create.mutate(data)
-  }
-
-  function addImage() {
-    const url = imageDraft.trim()
-    if (!url) return
-    setForm({ ...form, imageUrls: [...form.imageUrls, url] })
-    setImageDraft('')
   }
 
   return (
@@ -184,75 +176,20 @@ export function GuideEditor({ guide }: { guide?: GuideAdminDetail }) {
 
         <div>
           <span className="text-sm text-muted">Images</span>
-          <p className="text-xs text-muted/80 mt-0.5">
-            La première image sert de couverture. Envoyez un fichier, ou collez
-            l’adresse d’une image déjà hébergée.
-          </p>
 
-          {/* Deux chemins, volontairement. L'envoi couvre le cas courant ; la
-              saisie d'URL reste pour les images déjà en ligne — et elle est le
-              seul chemin qui fonctionne tant que le stockage n'est pas
-              provisionné. */}
+          {/* La liste d'URLs en texte a disparu au profit de la zone
+              pointillée : elle affichait des adresses que personne ne relit,
+              là où l'auteur d'un article veut voir SES photos. La saisie
+              d'adresse reste, repliée dans le composant — c'est le seul chemin
+              qui fonctionne tant que le stockage Blob n'est pas provisionné. */}
           <div className="mt-2">
-            <ImageUploadButton
-              onUploaded={(url) =>
-                setForm((f) => ({ ...f, imageUrls: [...f.imageUrls, url] }))
-              }
+            <ImageDropzone
+              value={form.imageUrls}
+              onChange={(next) => setForm((f) => ({ ...f, imageUrls: next }))}
+              max={10}
+              hint="La première image sert de couverture à l’article."
             />
           </div>
-
-          <div className="flex gap-2 mt-3">
-            <input
-              type="url"
-              value={imageDraft}
-              onChange={(e) => setImageDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  addImage()
-                }
-              }}
-              placeholder="https://…"
-              className="flex-1 min-w-0 h-11 px-3 rounded-xl border border-muted/30 bg-white focus:outline-none focus:ring-2 focus:ring-primary/40"
-            />
-            <button
-              type="button"
-              onClick={addImage}
-              className="px-4 rounded-xl bg-surface text-ink font-semibold whitespace-nowrap"
-            >
-              Ajouter
-            </button>
-          </div>
-          {form.imageUrls.length > 0 && (
-            <ul className="mt-2 space-y-1">
-              {form.imageUrls.map((url, i) => (
-                <li
-                  key={`${url}-${i}`}
-                  className="flex items-center gap-2 text-sm bg-white rounded-xl border border-muted/20 px-3 py-2"
-                >
-                  <span className="truncate flex-1 text-muted">{url}</span>
-                  {i === 0 && (
-                    <span className="text-xs text-primary whitespace-nowrap">
-                      couverture
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    aria-label="Retirer cette image"
-                    onClick={() =>
-                      setForm({
-                        ...form,
-                        imageUrls: form.imageUrls.filter((_, j) => j !== i),
-                      })
-                    }
-                    className="p-1 rounded-full hover:bg-black/5"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
 
         <label className="flex items-center gap-3 bg-white rounded-xl border border-muted/20 px-4 py-3">
