@@ -29,16 +29,60 @@ const whatsapp = z
   .transform((value) => (value === '' ? null : value))
   .nullish()
 
-export const createOperatorSchema = z.object({
-  email: z.string().email(),
-  name: z.string().min(1).max(120),
-  displayName: z.string().min(1).max(120),
+// Les champs d'identité d'un opérateur, déclarés UNE fois et partagés par la
+// création et l'édition. Deux listes jumelles auraient fini par diverger sur
+// une borne — un `max(120)` d'un côté, rien de l'autre — et l'écran d'édition
+// aurait accepté ce que la création refuse.
+const operatorIdentityFields = {
+  email: z.string().trim().toLowerCase().email(),
+  name: z.string().trim().min(1).max(120),
+  displayName: z.string().trim().min(1).max(120),
   whatsapp,
+}
+
+export const createOperatorSchema = z.object(operatorIdentityFields)
+
+/**
+ * Édition d'un opérateur existant.
+ *
+ * `setOperatorWhatsapp` a disparu au profit de cette procédure : le numéro
+ * était le seul champ modifiable, et le garder à part aurait laissé DEUX
+ * chemins d'écriture sur la même colonne. Le second aurait tôt ou tard oublié
+ * une validation que le premier applique.
+ *
+ * Toujours aucun `role` — comme partout dans ce fichier. L'édition change une
+ * fiche, jamais des droits.
+ *
+ * L'email EST modifiable, contrairement à celui d'un touriste (lecture seule
+ * sur /account, faute de vérification d'adresse). La raison est asymétrique :
+ * l'admin saisit lui-même l'adresse de l'opérateur à la création, et une faute
+ * de frappe rend le compte définitivement inconnectable — le titulaire ne peut
+ * même pas demander une réinitialisation. Il faut donc un chemin de correction.
+ */
+export const updateOperatorSchema = z.object({
+  operatorId: z.string().min(1),
+  ...operatorIdentityFields,
+  // Vide vaut « pas d'avatar » et devient `null` : c'est ce que renvoie un
+  // champ de formulaire qu'on efface, et le refuser interdirait de retirer une
+  // image devenue morte. Même grammaire que `whatsapp` ci-dessus.
+  avatarUrl: z
+    .string()
+    .trim()
+    .max(500)
+    .refine((v) => v === '' || v.startsWith('/') || /^https?:\/\//.test(v), {
+      message: 'Indiquez un chemin interne (/images/…) ou une URL http(s).',
+    })
+    .transform((v) => (v === '' ? null : v))
+    .nullish(),
 })
 
-export const setOperatorWhatsappSchema = z.object({
+export const operatorIdSchema = z.object({
   operatorId: z.string().min(1),
-  whatsapp,
+})
+
+export const setOperatorActiveSchema = z.object({
+  operatorId: z.string().min(1),
+  active: z.boolean(),
 })
 
 // La cible est bornée par `ADMIN_SETTABLE_STATUSES`, la MÊME liste qui type les
@@ -94,7 +138,7 @@ export const adminBookingsSchema = z.object({
 
 export type AdminBookingsInput = z.infer<typeof adminBookingsSchema>
 export type CreateOperatorInput = z.infer<typeof createOperatorSchema>
-export type SetOperatorWhatsappInput = z.infer<typeof setOperatorWhatsappSchema>
+export type UpdateOperatorInput = z.infer<typeof updateOperatorSchema>
 
 // Catalogue.
 //

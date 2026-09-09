@@ -173,6 +173,21 @@ model Operator {
   /// bouton WhatsApp se désactive plutôt que de composer un numéro inventé.
   whatsapp String?
 
+  /// Un opérateur qui porte déjà des réservations ne se SUPPRIME pas :
+  /// `activities → slots` est en CASCADE mais `slots → bookings` en RESTRICT,
+  /// donc la suppression casserait sur une clé étrangère illisible — et
+  /// effacerait l'historique de touristes qui, eux, n'ont rien demandé.
+  ///
+  /// On le désactive : ses activités passent en `archived`, son compte retombe
+  /// en `tourist`, les réservations déjà prises restent intactes et
+  /// consultables. Même grammaire que `Category.active` et
+  /// `GuideCategory.active` — on désactive, on ne supprime pas.
+  ///
+  /// La suppression franche reste possible tant qu'AUCUNE réservation n'existe :
+  /// c'est le cas de l'opérateur créé par erreur, qu'il serait absurde de garder
+  /// à vie dans la liste.
+  active Boolean @default(true)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -28,7 +28,8 @@ types/               contrat de sortie : Activity, ActivityFull, Booking…
 
 ## Règles à ne pas enfreindre
 
-- **`prisma db push` est interdit.** Les contraintes `CHECK` sont écrites à la main dans le SQL des migrations ; `db push` les supprimerait en silence et rendrait la survente possible. Utiliser `prisma migrate dev` / `deploy`.
+- **`prisma db push` est interdit.** Les contraintes `CHECK` sont écrites à la main dans le SQL des migrations ; `db push` les supprimerait en silence et rendrait la survente possible.
+- ⚠️ **`prisma migrate dev` est inutilisable sur ce projet** (constaté le 09/09/2026). Le checksum de `20260902120000_add_categories` diverge de ce qui a été appliqué : `migrate dev` — **même avec `--create-only`** — répond « The migration was modified after it was applied. We need to reset the "public" schema… All data will be lost ». Or cette base est celle que sert le site (voir ci-dessous). `migrate status`, lui, affiche « up to date » et ne signale rien. **Écrire les nouvelles migrations À LA MAIN** (`prisma/migrations/AAAAMMJJHHMMSS_nom/migration.sql`) et les appliquer par **`prisma migrate deploy`**, qui ne reset jamais et ignore la divergence de checksum — c'est déjà ce que lance `npm run build`.
 - ⚠️ **Depuis le 07/09/2026, le site en ligne pointe sur la branche `dev`.** Les variables `DATABASE_URL` et `DATABASE_URL_UNPOOLED` de production Vercel ont été basculées sur l'endpoint `ep-polished-mouse-b2n8pcje`. **Le cloisonnement dev/prod n'existe donc plus** : `npm run db:seed`, `prisma migrate dev` et `migrate reset` lancés en local écrivent désormais dans la base que servent les visiteurs. La branche `production` (`br-winter-rice-b2ctx6se`, endpoint `ep-wild-unit-b23f1j9r`) est intacte et reste le chemin de retour.
 - **Le `.env` local pointe sur la branche Neon `dev`** — la même que la production, voir ci-dessus. `migrate reset` est destructif. Le seed, lui, ne l'est pas — tout y passe par `upsert`, et le catalogue est en `update: {}`, donc **relancer le seed ne restaure rien** — mais il réécrit sans condition le mot de passe et le rôle des 6 comptes prédéfinis. Le pointer sur la production y poserait le mot de passe public.
 - **Tout horaire d'activité se formate via `lib/datetime.ts`** (`Indian/Mauritius`, UTC+4, sans DST). Le fuseau du navigateur afficherait un départ de 09:00 à 07:00 pour un touriste à Paris.
@@ -88,13 +89,16 @@ Les tests d'intégration y visent un **Postgres jetable lancé dans le runner** 
 | 8 · Admin | ✅ modération, validation des opérateurs, révocation |
 | 9 · Interrupteurs de fonctionnalité | ✅ registre, cascade, garde-fou tRPC, écran `/admin/features` |
 | 10 · Catégories | ✅ table + CRUD admin `/admin/categories`, trois listes en dur supprimées |
-| 11 · Back-office | ✅ listing des réservations (deux contacts par ligne) et des comptes — **lecture seule** |
+| 11 · Back-office | ✅ listing des réservations (deux contacts par ligne), filtrable par statut et par période |
 | 12 · Catalogue admin | ✅ `/admin/activities` — l'admin saisit et corrige les fiches de n'importe quel opérateur |
 | 13 · Lot 1 sans modération | ✅ modération et gestion de comptes retirées, opérateurs créés par l'admin, rôle `superadmin` (Kled) pour les interrupteurs |
 | 14 · Guides éditoriaux | ✅ articles Markdown + images, classification administrable, `/guide` et `/guide/[slug]` |
 | 15 · Recherche, guides 100 % administrables, envoi de photos | ✅ filtre `q` de bout en bout, vocabulaires unifiés, blocs figés du guide migrés en articles, upload Vercel Blob |
+| 16 · Cycle de vie des opérateurs | ✅ édition complète, suppression si vierge, désactivation sinon (`Operator.active`) |
 
-**99 tests verts** (`npm test`) : concurrence, RULE-001, annulation, cloisonnement opérateur, fuseau, modération, cascade des flags, catégories, cloisonnement des listings, écarts du catalogue admin, recherche par mot-clé et vocabulaire de filtrage.
+**118 tests verts** (`npm test`) : concurrence, RULE-001, annulation, cloisonnement opérateur, fuseau, modération, cascade des flags, catégories, cloisonnement des listings, écarts du catalogue admin, recherche par mot-clé, vocabulaire de filtrage, et cycle de vie des opérateurs.
+
+**Retirer un opérateur a DEUX formes, et c'est la base qui l'impose.** `activities → slots` est en CASCADE mais `slots → bookings` en RESTRICT : dès qu'une réservation existe, la suppression casserait sur une clé étrangère et effacerait l'historique de touristes qui n'ont rien demandé. `deleteOperator` n'accepte donc que l'opérateur **vierge** (celui créé par erreur) ; au-delà, `setOperatorActive(false)` archive ses activités, rétrograde son compte en `tourist` et conserve tout. `deletable` est dérivé côté serveur par `listOperators` — l'écran l'affiche, le service le **recompte** sous transaction. La réactivation rend le rôle mais **ne désarchive pas** : republier en masse ressusciterait des départs passés et des prix périmés.
 
 ## Dettes assumées — acceptables avant lancement, pas au lancement
 

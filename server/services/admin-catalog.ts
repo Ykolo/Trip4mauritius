@@ -170,9 +170,15 @@ export async function getActivityForAdmin(
  * Non vérifiés inclus, avec le drapeau : au lancement, l'admin saisit le
  * catalogue pour des enseignes qui n'ont pas encore de compte validé. Les
  * masquer aurait rendu la création impossible tant que personne n'est approuvé.
+ *
+ * Les DÉSACTIVÉS, eux, sont exclus — c'est la différence entre « pas encore
+ * approuvé » et « ne travaille plus avec nous ». Les laisser proposer ici
+ * permettrait de créer une fiche neuve chez un prestataire dont on vient
+ * d'archiver tout le catalogue.
  */
 export async function listOperatorOptions(): Promise<AdminOperatorOption[]> {
   const operators = await db.operator.findMany({
+    where: { active: true },
     include: { _count: { select: { activities: true } } },
     orderBy: { displayName: 'asc' },
   })

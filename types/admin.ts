@@ -25,7 +25,23 @@ export interface AdminOperator {
   userEmail: string
   /** Numéro professionnel du prestataire — le bouton WhatsApp du back-office. */
   whatsapp: string | null
+  avatarUrl: string | null
   activityCount: number
+  /**
+   * Réservations portées par les activités de cet opérateur, tous statuts
+   * confondus — annulations comprises. C'est ce qui décide si la fiche est
+   * supprimable, et une annulation reste une trace comptable qu'on ne jette pas.
+   */
+  bookingCount: number
+  /**
+   * Dérivé côté serveur, jamais recalculé dans l'écran — même doctrine que
+   * `Booking.cancellable` et `OperatorSlot.deletable`. Le front qui
+   * reconstituerait la règle finirait par proposer un bouton que la procédure
+   * rejette.
+   */
+  deletable: boolean
+  /** `false` : activités archivées et compte rétrogradé. Voir `Operator.active`. */
+  active: boolean
   createdAt: string
 }
 
