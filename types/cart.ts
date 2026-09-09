@@ -58,9 +58,23 @@ export interface Booking {
   activitySlug: string
   imageUrl: string
   operatorName: string
-  /** Date et heure du départ, épinglées sur Indian/Mauritius. */
+  /**
+   * Comment cette réservation a été vendue. Dérivé côté serveur : l'écran
+   * n'a pas à deviner qu'une réservation est une location parce qu'elle porte
+   * une date de fin.
+   */
+  mode: 'slot' | 'daily'
+  /** Début, épinglé sur Indian/Mauritius. Renseigné dans les deux modes. */
   date: string
   time: string
+  /**
+   * Fin de la période — `null` en mode créneau, où la durée appartient à
+   * l'activité et non à la réservation.
+   */
+  endDate: string | null
+  endTime: string | null
+  /** Jours facturés en mode journée, `null` en mode créneau. */
+  billedDays: number | null
   participants: number
   totalPrice: number
   depositDue: number

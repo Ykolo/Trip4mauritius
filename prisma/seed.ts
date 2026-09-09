@@ -3,6 +3,20 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { ActivityStatus, PrismaClient, UserRole } from '@prisma/client'
 import { hashPassword } from 'better-auth/crypto'
 import type { Duration } from '../lib/durations'
+
+/**
+ * Durée réelle correspondant à chaque libellé, pour les fiches du seed.
+ *
+ * Mêmes valeurs que le rétro-remplissage de
+ * `20260909140000_add_booking_mode` : ce sont des ordres de grandeur, et
+ * `durationLabel` les reconvertit exactement dans le libellé d'origine.
+ */
+const SEED_DURATION_MINUTES: Record<Duration, number> = {
+  '< 2h': 90,
+  'Demi-journée': 240,
+  Journée: 480,
+  'Plusieurs jours': 1440,
+}
 import type { RegionValue } from '../lib/regions'
 
 // Le seed reprend les données qui vivaient dans lib/hooks/useActivities.ts.
@@ -492,6 +506,17 @@ async function main() {
         categoryId,
         region: a.region,
         duration: a.duration,
+        // Toutes les fiches du seed sont en mode créneau — c'est le défaut de
+        // la colonne. La bascule des 7 locations de véhicules en mode journée
+        // est une décision éditoriale, prise fiche par fiche depuis
+        // /admin/activities : la faire ici supprimerait leurs créneaux, donc
+        // annulerait les réservations posées dessus.
+        //
+        // `durationMinutes` est obligatoire dès lors que le mode est `slot`
+        // (CHECK `activities_slot_requires_duration`). On reprend la même
+        // correspondance que le rétro-remplissage de la migration, pour qu'une
+        // fiche seedée puis réenregistrée retrouve exactement son libellé.
+        durationMinutes: SEED_DURATION_MINUTES[a.duration],
         priceHt: a.priceHt,
         maxParticipants: a.maxParticipants,
         languages: a.lang,

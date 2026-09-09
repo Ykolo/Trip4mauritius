@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, ChevronLeft, ChevronRight, Loader2, Plus, Trash2 } from 'lucide-react'
 import { ImageUploadButton } from '@/components/forms/ImageUploadButton'
 import { useTRPC } from '@/lib/trpc/client'
-import { DURATIONS } from '@/lib/durations'
+import { DURATIONS, durationLabel } from '@/lib/durations'
 import { REGIONS, REGION_VALUES } from '@/lib/regions'
 import type { ActivityInput } from '@/lib/schemas/operator'
 import type { OperatorActivityDetail } from '@/types/operator'
@@ -67,6 +67,11 @@ const EMPTY: FormState = {
   categoryId: '',
   region: '',
   duration: '',
+  // Le modèle historique : c'est ce que décrit l'immense majorité du catalogue,
+  // et c'est ce que l'admin attend en ouvrant un formulaire vierge.
+  bookingMode: 'slot',
+  durationMinutes: 120,
+  dailyUnits: 1,
   description: { fr: '', en: '', de: '', es: '', ru: '' },
   priceHT: 0,
   maxParticipants: 10,
@@ -99,6 +104,12 @@ function fromDetail(detail: OperatorActivityDetail): FormState {
     categoryId: detail.categoryId,
     region: knownOr(detail.region, REGION_VALUES),
     duration: knownOr(detail.duration, DURATIONS),
+    bookingMode: detail.bookingMode,
+    // Les valeurs de repli ne servent qu'au champ de l'AUTRE mode, qui n'est
+    // pas affiché : basculer une fiche « créneau » vers « journée » doit
+    // proposer un stock plausible plutôt qu'un champ vide.
+    durationMinutes: detail.durationMinutes ?? 120,
+    dailyUnits: detail.dailyUnits ?? 1,
     description: detail.description,
     priceHT: detail.priceHT,
     maxParticipants: detail.maxParticipants,
@@ -468,10 +479,55 @@ export function ActivityForm({
 
       {step === 2 && (
         <div className="space-y-6">
+          {/* Le mode de vente commande tout le reste de l'étape : ce que le
+              prix signifie, ce qui se saisit à côté, et si la fiche a des
+              créneaux. Il est donc EN TÊTE, pas noyé dans la grille. */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-ink mb-2">
+              Mode de réservation *
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {(
+                [
+                  {
+                    value: 'slot' as const,
+                    title: 'Sur créneau',
+                    hint: 'Des départs programmés, avec des places. Le prix est par personne.',
+                  },
+                  {
+                    value: 'daily' as const,
+                    title: 'À la journée',
+                    hint: 'Le client choisit ses dates. Le prix est celui de la journée, quel que soit le nombre de personnes.',
+                  },
+                ]
+              ).map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => set('bookingMode', option.value)}
+                  className={`text-left px-4 py-3 rounded-xl border transition ${
+                    form.bookingMode === option.value
+                      ? 'border-primary bg-primary/5'
+                      : 'border-surface bg-base hover:border-muted/40'
+                  }`}
+                >
+                  <span className="block font-semibold text-ink text-sm">
+                    {option.title}
+                  </span>
+                  <span className="block text-xs text-muted mt-0.5">
+                    {option.hint}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-ink mb-2">
-                Prix par personne (€) *
+                {form.bookingMode === 'daily'
+                  ? 'Prix par jour (€) *'
+                  : 'Prix par personne (€) *'}
               </label>
               <input
                 type="number"
@@ -490,25 +546,59 @@ export function ActivityForm({
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-ink mb-2">
-                Durée *
-              </label>
-              <select
-                value={form.duration}
-                onChange={(e) => set('duration', e.target.value as FormState['duration'])}
-                className="w-full px-4 py-3 rounded-xl border border-surface bg-base focus:outline-none focus:ring-2 focus:ring-primary/30"
-              >
-                <option value="">Choisir…</option>
-                {DURATIONS.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
+              {/* En mode créneau, la durée se saisit en MINUTES et le libellé
+                  de filtre en est déduit : c'est elle qui transforme un départ
+                  de 8:00 en « 08:00 – 10:00 », et deux saisies pour la même
+                  réalité divergeraient. En mode journée il n'y a rien à
+                  déduire — c'est le touriste qui choisit sa période — donc le
+                  libellé redevient un choix. */}
+              {form.bookingMode === 'slot' ? (
+                <>
+                  <label className="block text-sm font-medium text-ink mb-2">
+                    Durée (minutes) *
+                  </label>
+                  <input
+                    type="number"
+                    min="15"
+                    step="15"
+                    value={form.durationMinutes ?? 120}
+                    onChange={(e) =>
+                      set('durationMinutes', parseInt(e.target.value) || 15)
+                    }
+                    className="w-full px-4 py-3 rounded-xl border border-surface bg-base focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                  <p className="text-xs text-muted mt-1">
+                    Classée « {durationLabel(form.durationMinutes ?? 120)} » dans
+                    les filtres du catalogue.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <label className="block text-sm font-medium text-ink mb-2">
+                    Durée affichée *
+                  </label>
+                  <select
+                    value={form.duration}
+                    onChange={(e) =>
+                      set('duration', e.target.value as FormState['duration'])
+                    }
+                    className="w-full px-4 py-3 rounded-xl border border-surface bg-base focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  >
+                    <option value="">Choisir…</option>
+                    {DURATIONS.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-ink mb-2">
-                Participants max. *
+                {form.bookingMode === 'daily'
+                  ? 'Places du véhicule *'
+                  : 'Participants max. *'}
               </label>
               <input
                 type="number"
@@ -521,6 +611,28 @@ export function ActivityForm({
               />
             </div>
           </div>
+
+          {/* Le stock, et lui seul, empêche de promettre deux fois la même
+              voiture. À ne pas confondre avec le champ ci-dessus : 4 places ne
+              veut pas dire 4 véhicules. */}
+          {form.bookingMode === 'daily' && (
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-ink mb-2">
+                Unités louables en même temps *
+              </label>
+              <input
+                type="number"
+                min="1"
+                value={form.dailyUnits ?? 1}
+                onChange={(e) => set('dailyUnits', parseInt(e.target.value) || 1)}
+                className="w-full md:w-1/3 px-4 py-3 rounded-xl border border-surface bg-base focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+              <p className="text-xs text-muted mt-1">
+                1 pour un véhicule unique. Deux clients ne pourront pas réserver
+                des dates qui se chevauchent au-delà de ce nombre.
+              </p>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-ink mb-2">

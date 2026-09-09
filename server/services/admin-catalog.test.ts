@@ -69,6 +69,10 @@ async function activityInput(): Promise<ActivityInput> {
     categoryId: await testCategoryId(),
     region: 'North',
     duration: '< 2h',
+    bookingMode: 'slot' as const,
+    // Cohérent avec le libellé : `durationLabel` le DÉRIVE de cette valeur en
+    // mode créneau, donc 90 doit bien redonner « < 2h ».
+    durationMinutes: 90,
     description: { fr: 'Une sortie de test.' },
     priceHT: 120,
     maxParticipants: 12,
@@ -89,6 +93,7 @@ async function publishedActivity(operatorId: string) {
       title: 'Sortie en ligne',
       region: 'West',
       duration: 'Demi-journée',
+      durationMinutes: 240,
       priceHt: 90,
       maxParticipants: 10,
       status: 'published',
@@ -263,7 +268,7 @@ describe('créneaux', () => {
 
     await createBookings({
       userId: tourist.id,
-      lines: [{ slotId: slot.id, participants: 2 }],
+      lines: [{ mode: 'slot' as const, slotId: slot.id, participants: 2 }],
       contactPhone: '+23057000000',
     })
 

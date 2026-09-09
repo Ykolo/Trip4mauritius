@@ -64,6 +64,8 @@ async function activityInput(
     categoryId: await testCategoryId(),
     region: 'South',
     duration: 'Demi-journée',
+    bookingMode: 'slot' as const,
+    durationMinutes: 240,
     description: { fr: 'Description de test.' },
     priceHT: 60,
     maxParticipants: 8,
@@ -116,7 +118,11 @@ async function bookingOn(activityId: string) {
     data: {
       bookingRef: `${TEST_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       userId: tourist.id,
+      activityId,
       slotId: slot.id,
+      // Recopié du créneau, comme le fait `createBookings` : c'est
+      // `bookings_mode_shape` qui refuserait une ligne sans période.
+      startsAt: slot.startsAt,
       participants: 2,
       totalPrice: 100,
       depositDue: 20,

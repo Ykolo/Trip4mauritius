@@ -56,6 +56,12 @@ export interface OperatorActivitySummary {
 
 export interface OperatorActivityDetail extends OperatorActivitySummary {
   duration: string
+  /** Sur créneau ou à la journée — décide de tout le reste du formulaire. */
+  bookingMode: 'slot' | 'daily'
+  /** Durée réelle en mode créneau ; `null` en mode journée. */
+  durationMinutes: number | null
+  /** Stock d'unités louables en mode journée ; `null` en mode créneau. */
+  dailyUnits: number | null
   maxParticipants: number
   languages: string[]
   imageUrls: string[]
@@ -68,8 +74,12 @@ export interface OperatorActivityDetail extends OperatorActivitySummary {
 export interface OperatorBookingRow {
   id: string
   bookingRef: string
+  /** Début — un départ sur créneau, ou le retrait d'une location. */
   date: string
   time: string
+  /** Fin de la location — `null` quand la réservation porte sur un créneau. */
+  endDate: string | null
+  endTime: string | null
   touristName: string
   /** Le numéro figé sur la réservation, pas celui du profil du client. */
   contactPhone: string | null

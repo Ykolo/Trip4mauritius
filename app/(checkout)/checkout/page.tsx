@@ -119,7 +119,12 @@ export default function CheckoutPage() {
     createBooking.mutate({
       // Seuls le créneau et le nombre de participants partent : aucun montant.
       // Le serveur relit le prix en base et recalcule tout.
+      //
+      // `mode: 'slot'` en dur pour l'instant : le panier ne sait porter que des
+      // créneaux. Les lignes à la journée arrivent avec le tunnel public (B2),
+      // qui donnera au panier une clé de ligne autre que le seul `slotId`.
       items: cart.items.map((item) => ({
+        mode: 'slot' as const,
         slotId: item.slotId,
         participants: item.participants,
       })),

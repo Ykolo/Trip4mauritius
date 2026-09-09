@@ -80,9 +80,16 @@ export interface AdminBookingRow {
   status: BookingStatus
   createdAt: string
 
-  /** Départ, épinglé sur Indian/Mauritius. */
+  /** Créneau ou location à la journée — décide de ce que la ligne affiche. */
+  mode: 'slot' | 'daily'
+  /** Début, épinglé sur Indian/Mauritius. Renseigné dans les deux modes. */
   date: string
   time: string
+  /** Fin de la location — `null` en mode créneau. */
+  endDate: string | null
+  endTime: string | null
+  /** Jours facturés en mode journée, `null` en mode créneau. */
+  billedDays: number | null
   /** Le départ a-t-il déjà eu lieu ? Dérivé ici, jamais recalculé côté écran. */
   departed: boolean
 

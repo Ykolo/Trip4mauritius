@@ -65,6 +65,8 @@ async function activityInput(
     categoryId: await testCategoryId(),
     region: 'North',
     duration: '< 2h',
+    bookingMode: 'slot' as const,
+    durationMinutes: 90,
     description: { fr: 'Une sortie de test.' },
     priceHT: 80,
     maxParticipants: 12,
@@ -132,7 +134,7 @@ describe('cloisonnement entre opérateurs', () => {
     })
     await createBookings({
       userId: tourist.id,
-      lines: [{ slotId: withSlot.slots[0].id, participants: 2 }],
+      lines: [{ mode: 'slot' as const, slotId: withSlot.slots[0].id, participants: 2 }],
       contactPhone: '+230 5000 0000',
     })
 
@@ -282,7 +284,7 @@ describe('créneaux', () => {
     })
     await createBookings({
       userId: tourist.id,
-      lines: [{ slotId, participants: 1 }],
+      lines: [{ mode: 'slot' as const, slotId, participants: 1 }],
       contactPhone: '+230 5000 0000',
     })
 

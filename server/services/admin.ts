@@ -85,9 +85,10 @@ export async function listBookingsForAdmin(
   if (filters.status !== 'all') where.status = filters.status
 
   if (filters.period !== 'all') {
-    where.slot = {
-      startsAt: filters.period === 'upcoming' ? { gte: now } : { lt: now },
-    }
+    // `booking.startsAt` et non `slot.startsAt` : une location à la journée n'a
+    // pas de créneau, et un filtre passant par la relation l'aurait exclue du
+    // listing sans que rien ne le signale.
+    where.startsAt = filters.period === 'upcoming' ? { gte: now } : { lt: now }
   }
 
   if (filters.search) {
@@ -106,13 +107,9 @@ export async function listBookingsForAdmin(
       where,
       include: {
         user: true,
-        slot: {
-          include: { activity: { include: { operator: { include: { user: true } } } } },
-        },
+        activity: { include: { operator: { include: { user: true } } } },
       },
-      orderBy: {
-        slot: { startsAt: filters.period === 'upcoming' ? 'asc' : 'desc' },
-      },
+      orderBy: { startsAt: filters.period === 'upcoming' ? 'asc' : 'desc' },
       skip: (filters.page - 1) * ROWS_PER_PAGE,
       take: ROWS_PER_PAGE,
     }),
@@ -126,12 +123,16 @@ export async function listBookingsForAdmin(
       status: booking.status as BookingStatus,
       createdAt: booking.createdAt.toISOString(),
 
-      date: mauritiusDate(booking.slot.startsAt),
-      time: mauritiusTime(booking.slot.startsAt),
-      departed: booking.slot.startsAt.getTime() < now.getTime(),
+      mode: booking.slotId === null ? ('daily' as const) : ('slot' as const),
+      date: mauritiusDate(booking.startsAt),
+      time: mauritiusTime(booking.startsAt),
+      endDate: booking.endsAt ? mauritiusDate(booking.endsAt) : null,
+      endTime: booking.endsAt ? mauritiusTime(booking.endsAt) : null,
+      billedDays: booking.billedDays,
+      departed: booking.startsAt.getTime() < now.getTime(),
 
-      activityTitle: booking.slot.activity.title,
-      activitySlug: booking.slot.activity.slug,
+      activityTitle: booking.activity.title,
+      activitySlug: booking.activity.slug,
       participants: booking.participants,
       totalPrice: booking.totalPrice.toNumber(),
       depositDue: booking.depositDue.toNumber(),
@@ -141,10 +142,10 @@ export async function listBookingsForAdmin(
       touristEmail: booking.user.email,
       contactPhone: booking.contactPhone,
 
-      operatorId: booking.slot.activity.operator.id,
-      operatorName: booking.slot.activity.operator.displayName,
-      operatorEmail: booking.slot.activity.operator.user.email,
-      operatorWhatsapp: booking.slot.activity.operator.whatsapp,
+      operatorId: booking.activity.operator.id,
+      operatorName: booking.activity.operator.displayName,
+      operatorEmail: booking.activity.operator.user.email,
+      operatorWhatsapp: booking.activity.operator.whatsapp,
     })),
     total,
     pages: Math.max(1, Math.ceil(total / ROWS_PER_PAGE)),
@@ -217,7 +218,11 @@ export async function setBookingStatus(input: {
       })
     }
 
-    if (input.status === 'cancelled') {
+    // Rendre les places, UNIQUEMENT en mode créneau. Une location à la journée
+    // n'a pas de compteur à recréditer : sa période redevient libre du seul
+    // fait que le statut n'est plus actif, puisque la disponibilité s'y calcule
+    // en comptant les réservations actives qui chevauchent.
+    if (input.status === 'cancelled' && booking.slotId !== null) {
       // Soustraction franche, sans GREATEST(0, …) : la garde de statut
       // ci-dessus rend le double décrément impossible, et le CHECK
       // `spotsTaken >= 0` doit rester capable de signaler une régression au
@@ -246,34 +251,33 @@ export async function listOperators(): Promise<AdminOperator[]> {
     orderBy: { createdAt: 'desc' },
   })
 
-  // Comptage des réservations en UNE requête groupée, pas une par opérateur :
-  // le listing n'est pas paginé, et un `count` par ligne ferait autant
+  // Comptage des réservations en DEUX requêtes, pas une par opérateur : le
+  // listing n'est pas paginé, et un `count` par ligne ferait autant
   // d'allers-retours vers Neon qu'il y a de prestataires.
   //
-  // `groupBy` ne remonte que les opérateurs qui ont au moins une réservation —
-  // d'où le `?? 0` à la lecture, et non un `Map` pré-rempli qui laisserait
-  // croire que la valeur manquante est une anomalie.
+  // Le regroupement se fait sur `bookings.activityId`, que le lot B a rendu
+  // obligatoire. Il fallait auparavant passer par le créneau — et ce détour
+  // aurait laissé les locations à la journée hors du compte, donc rendu
+  // supprimable un loueur qui a vendu.
   const counts = await db.booking.groupBy({
-    by: ['slotId'],
+    by: ['activityId'],
     _count: { _all: true },
-    where: { slot: { activity: { operatorId: { in: rows.map((o) => o.id) } } } },
+    where: { activity: { operatorId: { in: rows.map((o) => o.id) } } },
   })
 
-  // `groupBy` ne sait grouper que sur des colonnes de la table ciblée : il n'y
-  // a pas d'`operatorId` sur `bookings`. On regroupe donc par créneau, puis on
-  // rattache chaque créneau à son opérateur.
-  const slotOwners = await db.activitySlot.findMany({
-    where: { id: { in: counts.map((c) => c.slotId) } },
-    select: { id: true, activity: { select: { operatorId: true } } },
+  const owners = await db.activity.findMany({
+    where: { id: { in: counts.map((c) => c.activityId) } },
+    select: { id: true, operatorId: true },
   })
 
-  const ownerBySlot = new Map(
-    slotOwners.map((s) => [s.id, s.activity.operatorId]),
-  )
+  const ownerByActivity = new Map(owners.map((a) => [a.id, a.operatorId]))
 
+  // `groupBy` ne remonte que les activités qui ont au moins une réservation —
+  // d'où le `?? 0` à la lecture, et non une Map pré-remplie qui laisserait
+  // croire que la valeur manquante est une anomalie.
   const bookingsByOperator = new Map<string, number>()
   for (const row of counts) {
-    const operatorId = ownerBySlot.get(row.slotId)
+    const operatorId = ownerByActivity.get(row.activityId)
     if (!operatorId) continue
     bookingsByOperator.set(
       operatorId,

@@ -67,7 +67,8 @@ async function bookedDeparture(label: string) {
       slug: `${TEST_PREFIX}${stamp}`,
       title: `Sortie ${label}`,
       region: 'North',
-      duration: '2h',
+      duration: '< 2h',
+      durationMinutes: 90,
       priceHt: 100,
       maxParticipants: 20,
       status: 'published',
@@ -85,7 +86,7 @@ async function bookedDeparture(label: string) {
 
   const { bookings } = await createBookings({
     userId: tourist.id,
-    lines: [{ slotId: slot.id, participants: 2 }],
+    lines: [{ mode: 'slot' as const, slotId: slot.id, participants: 2 }],
     contactPhone: '+23057000000',
   })
 

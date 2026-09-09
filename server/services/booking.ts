@@ -2,7 +2,8 @@ import { TRPCError } from '@trpc/server'
 import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { ACTIVE_BOOKING_STATUSES } from '@/lib/booking-status'
-import { computeBookingAmounts } from '@/lib/pricing'
+import { fromMauritiusWallClock } from '@/lib/datetime'
+import { billedDays, computeBookingAmounts } from '@/lib/pricing'
 import type { BookingLineInput } from '@/lib/schemas/booking'
 import { bookingInclude, toBooking } from '@/server/mappers/booking'
 import type { Booking, CreateBookingResult } from '@/types/cart'
@@ -41,40 +42,263 @@ async function nextBookingRef(tx: Prisma.TransactionClient): Promise<string> {
   return `MX-${new Date().getFullYear()}-${serial.padStart(6, '0')}`
 }
 
+/**
+ * Une date + une heure murales mauriciennes → l'instant correspondant.
+ *
+ * Le parsing vit ici plutôt que dans Zod parce que Zod valide la FORME et la
+ * conversion est une décision de fuseau, qui appartient au serveur.
+ */
+function wallClockToInstant(date: string, time: string): Date {
+  const [year, month, day] = date.split('-').map(Number)
+  const [hour, minute] = time.split(':').map(Number)
+  return fromMauritiusWallClock(year, month, day, hour, minute)
+}
+
+/** Deux périodes se chevauchent si chacune commence avant que l'autre finisse. */
+function overlaps(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean {
+  return aStart < bEnd && aEnd > bStart
+}
+
+/**
+ * Clé de VERROUILLAGE d'une ligne de panier — c'est elle qui rend
+ * l'interblocage impossible.
+ *
+ * Chaque ligne verrouille une ligne de base jusqu'au commit : le créneau pour
+ * une réservation à départ fixe, l'activité pour une location à la journée.
+ * Deux paniers qui prendraient ces verrous dans des ordres opposés
+ * s'attendraient mutuellement, et Postgres en tuerait un.
+ *
+ * Le tri par `slotId` suffisait quand il n'y avait qu'une sorte de verrou. Avec
+ * deux tables cibles, il faut un ordre TOTAL commun à toutes les transactions —
+ * d'où cette clé préfixée. Triée, elle place tous les verrous « journée » avant
+ * tous les verrous « créneau », chacun ordonné par identifiant. L'ordre
+ * d'acquisition devient identique partout, et le deadlock impossible plutôt que
+ * rare.
+ */
+function lockKey(line: BookingLineInput): string {
+  return line.mode === 'daily'
+    ? `daily:${line.activityId}`
+    : `slot:${line.slotId}`
+}
+
+/**
+ * Une location à la journée.
+ *
+ * Il n'y a ici AUCUN compteur à incrémenter : le stock n'est pas une colonne
+ * qu'on décrémente mais une capacité qu'on compare au nombre de réservations
+ * qui se chevauchent. Une Jeep louée du 12 au 14 n'est indisponible que sur ces
+ * dates-là — un `spotsTaken` ne saurait pas exprimer ça.
+ *
+ * Le verrou est donc EXPLICITE, et c'est la première chose faite : `SELECT …
+ * FOR UPDATE` sur la ligne de l'activité sérialise toutes les demandes qui la
+ * visent. Sans lui, deux touristes comptant simultanément « 0 réservation sur
+ * ces dates » repartiraient tous les deux avec la même voiture — c'est la
+ * survente que la règle du projet interdit, sous une autre forme que celle des
+ * créneaux.
+ *
+ * Tout ce qui suit le verrou est donc lu SOUS le verrou, `dailyUnits` compris :
+ * lire la capacité avant l'aurait exposée à une modification concurrente.
+ */
+async function createDailyBooking(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  contactPhone: string,
+  line: Extract<BookingLineInput, { mode: 'daily' }>,
+) {
+  const startsAt = wallClockToInstant(line.startDate, line.startTime)
+  const endsAt = wallClockToInstant(line.endDate, line.endTime)
+
+  if (endsAt.getTime() <= startsAt.getTime()) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'La date de fin doit être postérieure à la date de début.',
+    })
+  }
+
+  if (startsAt.getTime() <= Date.now()) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Cette période a déjà commencé.',
+    })
+  }
+
+  // ── Le point critique ──────────────────────────────────────────────────
+  // Le verrou d'abord, la lecture ensuite. La requête sert aussi de contrôle
+  // d'existence : une activité inconnue ne rend aucune ligne, donc aucun
+  // verrou, et on s'arrête là.
+  const locked = await tx.$queryRaw<{ id: string }[]>`
+    SELECT id FROM activities WHERE id = ${line.activityId} FOR UPDATE
+  `
+
+  if (locked.length === 0) {
+    throw new TRPCError({
+      code: 'NOT_FOUND',
+      message: "Cette activité n'est plus proposée.",
+    })
+  }
+
+  const activity = await tx.activity.findUniqueOrThrow({
+    where: { id: line.activityId },
+  })
+
+  if (activity.status !== 'published') {
+    throw new TRPCError({
+      code: 'NOT_FOUND',
+      message: "Cette activité n'est plus proposée.",
+    })
+  }
+
+  if (activity.bookingMode !== 'daily') {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Cette activité se réserve par créneau, pas à la journée.',
+    })
+  }
+
+  // `dailyUnits` est garanti non nul par `activities_daily_requires_units` dès
+  // que le mode est `daily`. Le test est là pour TypeScript, et pour que la
+  // journée où la contrainte sauterait on refuse au lieu de survendre.
+  if (activity.dailyUnits === null) {
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: `L'activité « ${activity.title} » n'a pas de stock défini.`,
+    })
+  }
+
+  if (line.participants > activity.maxParticipants) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: `Cette activité accepte au maximum ${activity.maxParticipants} participants.`,
+    })
+  }
+
+  // Le chevauchement, pas l'égalité : une location du 12 au 14 bloque le 13,
+  // même si personne n'a demandé le 13 en tant que tel.
+  const overlapping = {
+    activityId: activity.id,
+    status: { in: [...ACTIVE_STATUSES] },
+    startsAt: { lt: endsAt },
+    endsAt: { gt: startsAt },
+  } satisfies Prisma.BookingWhereInput
+
+  const taken = await tx.booking.count({ where: overlapping })
+
+  if (taken >= activity.dailyUnits) {
+    throw new TRPCError({
+      code: 'CONFLICT',
+      message: `« ${activity.title} » n'est plus disponible sur cette période.`,
+    })
+  }
+
+  // Même garde-fou anti-abus que sur les créneaux, transposé : tant que rien
+  // n'est payé, un compte pourrait bloquer un véhicule en enchaînant les
+  // demandes. Posé APRÈS le verrou, pour la même raison qu'il est posé après
+  // l'UPDATE côté créneaux — avant, deux transactions concurrentes liraient
+  // toutes les deux « aucune réservation ».
+  const alreadyBooked = await tx.booking.findFirst({
+    where: { ...overlapping, userId },
+    select: { id: true },
+  })
+
+  if (alreadyBooked) {
+    throw new TRPCError({
+      code: 'CONFLICT',
+      message: `Vous avez déjà une réservation de « ${activity.title} » sur cette période.`,
+    })
+  }
+
+  const days = billedDays(startsAt, endsAt)
+
+  // Le prix du JOUR multiplié par le nombre de jours — jamais par le nombre de
+  // participants. Louer une Jeep à quatre coûte le prix de la Jeep :
+  // `maxParticipants` en est le nombre de places, pas un multiplicateur.
+  const amounts = computeBookingAmounts(activity.priceHt.toNumber(), days)
+
+  return tx.booking.create({
+    data: {
+      bookingRef: await nextBookingRef(tx),
+      userId,
+      activityId: activity.id,
+      // Pas de créneau : c'est ce qui distingue les deux formes en base, et
+      // `bookings_mode_shape` refuse toute ligne bâtarde.
+      slotId: null,
+      startsAt,
+      endsAt,
+      billedDays: days,
+      participants: line.participants,
+      contactPhone,
+      ...amounts,
+      // « Créée », comme sur les créneaux : la mise en relation avec le loueur
+      // est manuelle, personne ne lui a encore dit qu'un client arrive.
+      status: 'pending_validation',
+    },
+    include: bookingInclude,
+  })
+}
+
 export async function createBookings(input: {
   userId: string
   lines: BookingLineInput[]
   contactPhone: string
 }): Promise<CreateBookingResult> {
-  // Un créneau ne peut pas figurer deux fois dans le même panier : ce serait
+  // Un même départ ne peut pas figurer deux fois dans le panier : ce serait
   // deux réservations que la limite anti-abus rejetterait de toute façon, mais
   // autant le dire clairement plutôt que d'échouer au milieu du tunnel.
-  const slotIds = new Set<string>()
+  //
+  // En mode journée, le doublon n'est pas l'identité mais le CHEVAUCHEMENT :
+  // louer la même voiture deux semaines distinctes est légitime, la louer deux
+  // fois sur des dates qui se recouvrent ne l'est pas.
+  const seenSlots = new Set<string>()
+  const seenPeriods: { activityId: string; start: Date; end: Date }[] = []
+
   for (const line of input.lines) {
-    if (slotIds.has(line.slotId)) {
+    if (line.mode === 'slot') {
+      if (seenSlots.has(line.slotId)) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Un même créneau apparaît deux fois dans le panier.',
+        })
+      }
+      seenSlots.add(line.slotId)
+      continue
+    }
+
+    const start = wallClockToInstant(line.startDate, line.startTime)
+    const end = wallClockToInstant(line.endDate, line.endTime)
+
+    const clash = seenPeriods.some(
+      (p) => p.activityId === line.activityId && overlaps(p.start, p.end, start, end),
+    )
+
+    if (clash) {
       throw new TRPCError({
         code: 'BAD_REQUEST',
-        message: 'Un même créneau apparaît deux fois dans le panier.',
+        message:
+          'Deux locations de la même activité se chevauchent dans le panier.',
       })
     }
-    slotIds.add(line.slotId)
+
+    seenPeriods.push({ activityId: line.activityId, start, end })
   }
 
-  // Traiter les créneaux dans un ORDRE STABLE.
-  //
-  // Chaque UPDATE verrouille la ligne de son créneau jusqu'au commit. Deux
-  // paniers contenant les créneaux A et B dans des ordres opposés
-  // s'interbloqueraient : le premier tient A et attend B, le second tient B et
-  // attend A. Postgres tuerait l'un des deux au bout d'une seconde. Trier par
-  // id impose le même ordre de verrouillage à tout le monde — le deadlock
-  // devient impossible, pas simplement rare.
-  const lines = [...input.lines].sort((a, b) => a.slotId.localeCompare(b.slotId))
+  // Traiter les lignes dans un ORDRE STABLE, cf. `lockKey` ci-dessus : c'est ce
+  // qui rend l'interblocage impossible plutôt que rare.
+  const lines = [...input.lines].sort((a, b) =>
+    lockKey(a).localeCompare(lockKey(b)),
+  )
 
   const created = await db.$transaction(
     async (tx) => {
       const bookings = []
 
       for (const line of lines) {
+        if (line.mode === 'daily') {
+          bookings.push(
+            await createDailyBooking(tx, input.userId, input.contactPhone, line),
+          )
+          continue
+        }
+
         const slot = await tx.activitySlot.findUnique({
           where: { id: line.slotId },
           include: { activity: true },
@@ -156,7 +380,11 @@ export async function createBookings(input: {
           data: {
             bookingRef: await nextBookingRef(tx),
             userId: input.userId,
+            activityId: slot.activityId,
             slotId: line.slotId,
+            // Recopié du créneau, jamais pointé : la réservation fige la
+            // période qu'elle engage. Voir `Booking.startsAt` au schéma.
+            startsAt: slot.startsAt,
             participants: line.participants,
             contactPhone: input.contactPhone,
             ...amounts,
@@ -220,7 +448,10 @@ export async function cancelBooking(input: {
       throw new TRPCError({ code: 'NOT_FOUND' })
     }
 
-    if (booking.slot.startsAt.getTime() <= Date.now()) {
+    // `booking.startsAt` et non `booking.slot.startsAt` : une location à la
+    // journée n'a pas de créneau, et la réservation porte de toute façon la
+    // période qu'elle engage.
+    if (booking.startsAt.getTime() <= Date.now()) {
       throw new TRPCError({
         code: 'BAD_REQUEST',
         message: 'Ce départ est passé, la réservation ne peut plus être annulée.',
@@ -252,11 +483,18 @@ export async function cancelBooking(input: {
     // Soustraction franche, sans GREATEST(0, …) : la garde de statut ci-dessus
     // rend le double décrément impossible, et le CHECK `spotsTaken >= 0` doit
     // rester capable de signaler une régression au lieu de l'absorber.
-    await tx.$executeRaw`
-      UPDATE activity_slots
-         SET "spotsTaken" = "spotsTaken" - ${booking.participants}
-       WHERE id = ${booking.slotId}
-    `
+    //
+    // UNIQUEMENT en mode créneau. Une location à la journée n'a pas de compteur
+    // à recréditer : sa période redevient libre du seul fait que le statut
+    // n'est plus actif, puisque la disponibilité se calcule en comptant les
+    // réservations actives qui chevauchent.
+    if (booking.slotId !== null) {
+      await tx.$executeRaw`
+        UPDATE activity_slots
+           SET "spotsTaken" = "spotsTaken" - ${booking.participants}
+         WHERE id = ${booking.slotId}
+      `
+    }
 
     return toBooking({ ...booking, status: 'cancelled' })
   })

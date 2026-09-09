@@ -27,10 +27,10 @@ datasource db {
 // ---------------------------------------------------------------------------
 
 model User {
-  id            String   @id @default(cuid())
+  id            String  @id @default(cuid())
   name          String
-  email         String   @unique
-  emailVerified Boolean  @default(false)
+  email         String  @unique
+  emailVerified Boolean @default(false)
   image         String?
 
   // additionalFields Better Auth — le rôle voyage dans la session, ce qui évite
@@ -72,7 +72,7 @@ model Session {
 }
 
 model Account {
-  id String @id @default(cuid())
+  id                    String    @id @default(cuid())
   // Requis par Better Auth >= 1.7. Le CLI @better-auth/cli est bloqué en 1.4 et
   // ne le connaît pas : il valide un schéma que la librairie rejette ensuite au
   // runtime. Ne pas se fier au CLI seul pour vérifier ce modèle.
@@ -133,6 +133,21 @@ enum ActivityStatus {
   // CASCADE et slots→bookings en RESTRICT, donc une suppression d'activité
   // réservée casserait sur une contrainte de clé étrangère illisible.
   archived
+}
+
+/// Comment une activité se vend. C'est le discriminant du tunnel entier.
+///
+/// Le catalogue ne connaissait qu'un modèle : un départ à heure fixe, avec des
+/// places. Or les locations de véhicules (`rent-jeep-wrangler`, `rent-vespa`…)
+/// étaient vendues par créneaux ponctuels faute de mieux — on ne pouvait pas
+/// louer une Jeep du mardi au jeudi.
+enum BookingMode {
+  /// Départs programmés, places décomptées sur `ActivitySlot`.
+  slot
+
+  /// Le touriste choisit sa période. Aucun créneau : la disponibilité se
+  /// calcule par CHEVAUCHEMENT contre `Activity.dailyUnits`.
+  daily
 }
 
 enum BookingStatus {
@@ -307,9 +322,40 @@ model Activity {
   categoryId String
   slug       String @unique
 
-  title    String
-  region   String
+  title  String
+  region String
+
+  /// Libellé de durée, liste fermée de `lib/durations.ts`. Purement ÉDITORIAL :
+  /// c'est ce que le tiroir de filtres du catalogue propose, rien de plus — il
+  /// ne pilote aucune logique de réservation.
+  ///
+  /// En mode `slot` il est DÉRIVÉ de `durationMinutes` : deux saisies pour une
+  /// même réalité divergeraient au premier oubli. En mode `daily` il reste
+  /// choisi par l'admin — il n'y a là aucune durée numérique dont le dériver,
+  /// puisque c'est le touriste qui la choisit.
   duration String
+
+  /// Durée réelle d'une activité sur créneau, en minutes.
+  ///
+  /// C'est elle qui transforme un départ en PLAGE : 8:00 sur une activité de
+  /// 2 h s'affiche « 08:00 – 10:00 ». La fin n'est jamais stockée sur le
+  /// créneau — elle se recalcule à l'affichage, sinon changer la durée de
+  /// l'activité laisserait tous les créneaux déjà créés sur l'ancienne.
+  ///
+  /// Obligatoire en mode `slot`, interdit de sens en mode `daily` (CHECK).
+  durationMinutes Int?
+
+  /// Stock d'unités louables simultanément, en mode `daily`. Une Jeep = 1.
+  ///
+  /// À ne PAS confondre avec `maxParticipants`, qui est le nombre de places du
+  /// véhicule : 4 places ne veut pas dire 4 véhicules. C'est cette colonne, et
+  /// elle seule, qui empêche de promettre deux fois la même voiture.
+  ///
+  /// Obligatoire en mode `daily` (CHECK) — la protection contre la survente en
+  /// dépend entièrement.
+  dailyUnits Int?
+
+  bookingMode BookingMode @default(slot)
 
   // priceFrom, exposé par le front, est DÉRIVÉ — jamais stocké.
   priceHt         Decimal @db.Decimal(10, 2)
@@ -339,6 +385,10 @@ model Activity {
   // pouvoir disparaître sous les activités qui la référencent.
   category Category       @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   slots    ActivitySlot[]
+  // Restrict, comme slots→bookings : une activité réservée ne disparaît pas
+  // sous les réservations qui la référencent. En mode journée, c'est le SEUL
+  // lien qui les retient — il n'y a pas de créneau pour le faire.
+  bookings Booking[]
 
   @@index([status, region, categoryId])
   @@index([operatorId])
@@ -355,7 +405,7 @@ model ActivitySlot {
   // d'afficher un départ de 09:00 à 07:00 pour un touriste à Paris.
   startsAt DateTime @db.Timestamptz(6)
 
-  maxSpots Int
+  maxSpots   Int
   // Compteur croissant. On ne stocke JAMAIS spotsLeft : un compteur qui ne fait
   // qu'augmenter se protège par une contrainte, et rend la survente impossible.
   spotsTaken Int @default(0)
@@ -374,7 +424,40 @@ model Booking {
   id         String @id @default(cuid())
   bookingRef String @unique
   userId     String
-  slotId     String
+
+  /// L'activité réservée, TOUJOURS renseignée.
+  ///
+  /// Une réservation à la journée n'a pas de créneau : sans cette colonne, elle
+  /// n'aurait plus aucun lien vers ce qu'elle réserve. Elle simplifie au passage
+  /// tout ce qui remontait la chaîne `slot → activity` pour retrouver
+  /// l'opérateur ou compter les ventes.
+  activityId String
+
+  /// Le créneau — `null` en mode journée.
+  slotId String?
+
+  /// Période couverte par la réservation, FIGÉE à la création.
+  ///
+  /// En mode créneau, `startsAt` recopie `ActivitySlot.startsAt`. C'est une
+  /// duplication assumée, et c'est la doctrine déjà appliquée à
+  /// `contactPhone` : la réservation fige ce qu'elle engage au lieu de pointer
+  /// vers une valeur qui pourrait bouger. Elle rend surtout le créneau
+  /// réellement optionnel — tri, filtre de période et mapper cessent de
+  /// traverser la relation. Le risque de divergence est nul : un créneau ne se
+  /// modifie jamais, il se crée ou se supprime, et la suppression est refusée
+  /// dès qu'il est réservé.
+  startsAt DateTime @db.Timestamptz(6)
+
+  /// Fin de la période — `null` en mode créneau, où la durée appartient à
+  /// l'activité (`durationMinutes`) et non à la réservation.
+  endsAt DateTime? @db.Timestamptz(6)
+
+  /// Nombre de jours FACTURÉS en mode journée, `null` en mode créneau.
+  ///
+  /// Dérivable de la période (toute tranche de 24 h entamée compte pour un
+  /// jour), mais figé pour la même raison que `totalPrice` : la facture doit
+  /// rester reproductible même si la règle d'arrondi évolue.
+  billedDays Int?
 
   participants     Int
   totalPrice       Decimal @db.Decimal(10, 2)
@@ -393,13 +476,17 @@ model Booking {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user     User         @relation(fields: [userId], references: [id], onDelete: Restrict)
-  slot     ActivitySlot @relation(fields: [slotId], references: [id], onDelete: Restrict)
+  user     User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  activity Activity      @relation(fields: [activityId], references: [id], onDelete: Restrict)
+  slot     ActivitySlot? @relation(fields: [slotId], references: [id], onDelete: Restrict)
   payments Payment[]
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([status, expiresAt])
   @@index([slotId])
+  /// L'index qui sert le calcul de disponibilité en mode journée : les
+  /// réservations d'une activité dont la période chevauche celle demandée.
+  @@index([activityId, startsAt])
   @@map("bookings")
 }
 
