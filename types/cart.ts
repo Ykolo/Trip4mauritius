@@ -6,11 +6,6 @@
 // requête, mais jamais une source de vérité. Le serveur relit le prix depuis
 // `Activity.priceHt` et recalcule tout à la création de la réservation.
 
-export interface CartItemSlot {
-  date: string
-  time: string
-}
-
 export interface CartItemActivity {
   slug: string
   title: string
@@ -18,16 +13,55 @@ export interface CartItemActivity {
   operator: string
 }
 
-export interface CartItem {
-  /** Clé du panier : un créneau ne peut y figurer qu'une seule fois. */
-  slotId: string
+/** Ce que le panier retient d'un départ sur créneau. */
+export interface CartItemSlot {
+  date: string
+  time: string
+  /** Fin dérivée de la durée de l'activité — `null` si elle n'est pas connue. */
+  endTime: string | null
+}
+
+/** Ce que le panier retient d'une location à la journée. */
+export interface CartItemPeriod {
+  startDate: string
+  startTime: string
+  endDate: string
+  endTime: string
+}
+
+interface CartItemBase {
   activityId: string
   activity: CartItemActivity
-  slot: CartItemSlot
   participants: number
-  /** Prix par personne relevé à l'ajout — indicatif, revérifié côté serveur. */
-  pricePerPerson: number
+  /**
+   * Prix de l'UNITÉ facturée, relevé à l'ajout : par personne en mode créneau,
+   * par jour en mode journée. Indicatif, revérifié côté serveur.
+   */
+  pricePerUnit: number
 }
+
+/**
+ * Une ligne de panier — sur créneau OU à la journée.
+ *
+ * Union DISCRIMINÉE, de la même main que `bookingLineSchema`
+ * (`lib/schemas/booking.ts`) et pour la même raison : un objet aux champs tous
+ * facultatifs aurait laissé exister une ligne portant à la fois un créneau et
+ * une période, que le serveur aurait dû arbitrer. Ici TypeScript force chaque
+ * écran à traiter les deux cas — c'est ce qui a fait remonter tous les endroits
+ * qui supposaient un `slotId`.
+ *
+ * `pricePerUnit` remplace `pricePerPerson` : l'unité facturée dépend du mode
+ * (une personne, ou un jour). Le champ gardait un nom qui n'était vrai que dans
+ * un cas sur deux, et le multiplier par le nombre de participants en mode
+ * journée aurait facturé une Jeep quatre fois à un groupe de quatre.
+ * Reste, dans les deux cas, un INSTANTANÉ indicatif : le serveur relit
+ * `Activity.priceHt` et recalcule tout.
+ */
+export type CartItem = CartItemBase &
+  (
+    | { mode: 'slot'; slotId: string; slot: CartItemSlot }
+    | { mode: 'daily'; period: CartItemPeriod }
+  )
 
 export interface CartTotals {
   items: CartItem[]

@@ -4,7 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { Trash2, Minus, Plus, Calendar } from 'lucide-react'
 import { computeBookingAmounts } from '@/lib/pricing'
-import { useCartStore } from '@/lib/stores/cart'
+import { cartItemKey, cartItemUnits, useCartStore } from '@/lib/stores/cart'
 import type { CartItem } from '@/types/cart'
 
 // Le panier vivant dans le navigateur (Zustand), il n'y a plus de mutation à
@@ -29,12 +29,18 @@ export function CartItemRow({ item }: { item: CartItem }) {
   const remove = useCartStore((s) => s.remove)
   const setParticipants = useCartStore((s) => s.setParticipants)
 
-  const amounts = computeBookingAmounts(item.pricePerPerson, item.participants)
+  const key = cartItemKey(item)
+  const units = cartItemUnits(item)
+
+  // `cartItemUnits` décide de ce qui se multiplie : les participants sur un
+  // créneau, les JOURS sur une location. Passer `item.participants` dans les
+  // deux cas facturait le véhicule une fois par occupant.
+  const amounts = computeBookingAmounts(item.pricePerUnit, units)
 
   const updateBy = (delta: number) => {
     const next = item.participants + delta
     if (next < 1 || next > MAX_PARTICIPANTS) return
-    setParticipants(item.slotId, next)
+    setParticipants(key, next)
   }
 
   // Une SEULE disposition, pas une variante mobile et une variante bureau.
@@ -75,13 +81,17 @@ export function CartItemRow({ item }: { item: CartItem }) {
           <p className="text-sm text-muted flex items-center gap-1 mt-1">
             <Calendar className="w-4 h-4 shrink-0" />
             <span className="truncate">
-              {formatSlotDate(item.slot.date)} à {item.slot.time}
+              {item.mode === 'daily'
+                ? `Du ${formatSlotDate(item.period.startDate)} au ${formatSlotDate(item.period.endDate)} · ${units} jour${units > 1 ? 's' : ''}`
+                : `${formatSlotDate(item.slot.date)} à ${item.slot.time}${
+                    item.slot.endTime ? ` – ${item.slot.endTime}` : ''
+                  }`}
             </span>
           </p>
         </div>
 
         <button
-          onClick={() => remove(item.slotId)}
+          onClick={() => remove(key)}
           className="self-start -mr-1 p-2 text-muted hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 shrink-0"
           aria-label="Retirer du panier"
         >

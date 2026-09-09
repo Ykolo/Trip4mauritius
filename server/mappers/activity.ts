@@ -19,11 +19,27 @@ import type {
 // le front consomme `spotsLeft`. Cette conversion ne doit exister qu'ici :
 // dupliquée ailleurs, elle divergera tôt ou tard.
 
-export function toActivitySlot(slot: DbSlot): ActivitySlot {
+/**
+ * `durationMinutes` vient de l'ACTIVITÉ, pas du créneau : c'est pourquoi il est
+ * passé en second argument plutôt que lu sur `slot`. L'heure de fin est dérivée
+ * ici, au point de conversion unique, et nulle part ailleurs — recalculée dans
+ * un composant, elle aurait fini par utiliser le fuseau du navigateur, et un
+ * départ de 09:00 se serait terminé à 09:00 pour un touriste à Paris.
+ */
+export function toActivitySlot(
+  slot: DbSlot,
+  durationMinutes: number | null,
+): ActivitySlot {
   return {
     id: slot.id,
     date: mauritiusDate(slot.startsAt),
     time: mauritiusTime(slot.startsAt),
+    endTime:
+      durationMinutes === null
+        ? null
+        : mauritiusTime(
+            new Date(slot.startsAt.getTime() + durationMinutes * 60_000),
+          ),
     spotsLeft: slot.maxSpots - slot.spotsTaken,
     maxSpots: slot.maxSpots,
   }
@@ -87,6 +103,9 @@ export function toActivityFull(
 ): ActivityFull {
   return {
     ...toActivity(activity),
+    bookingMode: activity.bookingMode,
+    durationMinutes: activity.durationMinutes,
+    dailyUnits: activity.dailyUnits,
     maxParticipants: activity.maxParticipants,
     languages: activity.languages,
     imageUrls: activity.imageUrls,
@@ -94,7 +113,9 @@ export function toActivityFull(
     included: activity.included,
     excluded: activity.excluded,
     operator: toActivityOperator(activity.operator),
-    slots: activity.slots.map(toActivitySlot),
+    slots: activity.slots.map((slot) =>
+      toActivitySlot(slot, activity.durationMinutes),
+    ),
     priceHT: activity.priceHt.toNumber(),
     reviewCount: activity.reviewCount,
   }

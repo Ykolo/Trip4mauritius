@@ -1,4 +1,4 @@
-import { ArrowLeft, CheckCircle2, Clock, MapPin, ShieldCheck, Star, Ticket } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Clock, MapPin, ShieldCheck, Ticket } from 'lucide-react'
 import type { Metadata } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -83,18 +83,16 @@ export default async function ActivityDetailedPage({
         </header>
 
         <div className="absolute bottom-0 left-0 right-0 p-6 md:p-10 max-w-7xl mx-auto pointer-events-none">
+          {/* Pas de note ni de compteur d'avis : il n'y a AUCUNE gestion des
+              avis au lot 1. `Activity.rating` existe en base, mais il vient du
+              seed — l'afficher revenait à montrer au visiteur une note que
+              personne n'a donnée et qu'aucun écran ne permet de contester. Les
+              colonnes restent, elles serviront le jour où les avis existeront ;
+              c'est leur AFFICHAGE qui était prématuré. */}
           <div className="flex flex-wrap items-center gap-3 mb-4 pointer-events-auto">
             <span className="bg-primary text-white text-[10px] md:text-xs font-bold px-3 py-1.5 rounded-md uppercase tracking-widest shadow-lg">
               {activity.category}
             </span>
-            {activity.rating !== undefined && (
-              <div className="flex items-center gap-1.5 text-white bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-md border border-white/10 shadow-sm">
-                <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                <span className="text-sm font-semibold">
-                  {activity.rating} ({activity.reviewCount} avis)
-                </span>
-              </div>
-            )}
           </div>
           <h1 className="text-3xl md:text-5xl lg:text-6xl font-display text-white drop-shadow-md mb-3">
             {activity.title}
@@ -187,8 +185,13 @@ export default async function ActivityDetailedPage({
           <div className="sticky top-24">
             <div className="border border-muted/20 bg-surface rounded-[2rem] shadow-card overflow-hidden">
               <div className="p-6 bg-gradient-to-br from-primary/5 to-transparent border-b border-muted/10">
+                {/* L'unité facturée dépend du mode de vente. « / Pers. » en dur
+                    annonçait un prix par personne sur une location dont le
+                    tarif est forfaitaire — soit quatre fois le prix affiché pour
+                    un groupe de quatre, au moment de payer. */}
                 <p className="text-sm font-semibold text-primary uppercase tracking-widest mb-1">
-                  Dès {activity.priceHT}€ / Pers.
+                  Dès {activity.priceHT}€{' '}
+                  {activity.bookingMode === 'daily' ? '/ Jour' : '/ Pers.'}
                 </p>
                 <h3 className="text-2xl font-display text-ink">Votre sélection</h3>
               </div>

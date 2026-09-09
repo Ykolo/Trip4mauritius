@@ -1,29 +1,26 @@
 "use client";
 
 import { useState } from "react";
-import { Search, ShieldCheck, ShoppingCart, User, X } from "lucide-react";
+import { Search, ShoppingCart, User, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { SearchBox } from "@/components/layout/SearchBox";
-import { useAuth } from "@/lib/hooks/useAuth";
 import { useCartHydrated, useCartStore } from "@/lib/stores/cart";
+
+// AUCUN raccourci vers le back-office ici.
+//
+// La barre du haut est rendue sur toutes les pages publiques, donc pour tous
+// les visiteurs : y placer un lien « Admin », même conditionné au rôle, faisait
+// exister l'administration dans l'interface du touriste. Le client a tranché —
+// l'admin tape `/admin` lui-même.
+//
+// Ce retrait n'enlève RIEN à la sécurité et n'en ajoute rien non plus : le lien
+// n'était que de l'affichage, `/admin` restant gardé par `AdminGuard` côté
+// écran et par `adminProcedure` côté serveur. Ce sont toujours les deux seuls
+// contrôles réels.
 
 export function TopBar() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  // Raccourci vers le back-office, réservé aux deux rôles qui y ont accès.
-  //
-  // Le lien existait déjà, mais SEULEMENT sur /account : depuis n'importe
-  // quelle autre page, rejoindre l'administration imposait un détour par le
-  // profil ou la saisie de l'URL à la main. Il est ici parce que la barre du
-  // haut est le seul élément présent sur toutes les pages publiques.
-  //
-  // `useAuth` et non `useSession` : il normalise le rôle et retombe sur
-  // `tourist` pour toute valeur inconnue. Ce n'est de toute façon que de
-  // l'affichage — `/admin` est gardé par `AdminGuard` côté écran et par
-  // `adminProcedure` côté serveur, qui sont les deux seuls contrôles réels.
-  const { data: user, isLoading: authLoading } = useAuth();
-  const isAdmin =
-    !authLoading && (user?.role === "admin" || user?.role === "superadmin");
   // Le compteur était figé à 0 et l'icône ne menait nulle part : le panier se
   // remplissait sans aucun retour visible. Il est lu ici directement dans le
   // store plutôt que passé en prop — le layout qui rend TopBar est un composant
@@ -75,24 +72,6 @@ export function TopBar() {
           >
             <Search className="w-5 h-5 text-primary" />
           </button>
-
-          {/* Rendu seulement une fois la session connue. Pendant le
-              chargement, `isAdmin` est faux — donc le client peint d'abord ce
-              que le serveur a rendu (rien), et l'hydratation ne diverge pas.
-              Sur mobile le libellé disparaît, l'écusson suffit : la barre y
-              tient déjà la recherche, le panier et le compte. */}
-          {isAdmin && (
-            <Link
-              href="/admin"
-              className="min-h-[48px] flex items-center gap-1.5 px-2 md:px-3 rounded-xl text-primary hover:bg-primary/5 active:scale-95 transition-transform"
-              aria-label="Espace d'administration"
-            >
-              <ShieldCheck className="w-5 h-5" />
-              <span className="hidden md:inline text-sm font-body font-semibold">
-                Admin
-              </span>
-            </Link>
-          )}
 
           <Link
             href="/cart"

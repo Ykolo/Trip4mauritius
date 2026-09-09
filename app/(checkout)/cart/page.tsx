@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { ShoppingBag } from 'lucide-react'
-import { useCartHydrated, useCartTotals } from '@/lib/stores/cart'
+import { cartItemKey, useCartHydrated, useCartTotals } from '@/lib/stores/cart'
 import { CartItemRow } from '@/components/ui/CartItemRow'
 import { CartSummary } from '@/components/ui/CartSummary'
 import { SkeletonCard } from '@/components/ui/SkeletonCard'
@@ -75,9 +75,10 @@ export default function CartPage() {
               enfin ce que son nom promet. */}
           <div className="space-y-4 min-w-0">
             {cart.items.map((item) => (
-              // Le créneau est la clé : deux lignes ne peuvent pas viser le
-              // même départ.
-              <CartItemRow key={item.slotId} item={item} />
+              // `cartItemKey` est la clé de ligne : le créneau en mode créneau,
+              // l'activité ET la période en mode journée. Le `slotId` seul ne
+              // pouvait plus servir — une location n'en a pas.
+              <CartItemRow key={cartItemKey(item)} item={item} />
             ))}
           </div>
 

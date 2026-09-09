@@ -7,7 +7,12 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Check, ChevronDown, ChevronUp, Loader2, AlertCircle } from 'lucide-react'
 import { useAuth } from '@/lib/hooks/useAuth'
-import { useCartHydrated, useCartStore, useCartTotals } from '@/lib/stores/cart'
+import {
+  cartItemKey,
+  useCartHydrated,
+  useCartStore,
+  useCartTotals,
+} from '@/lib/stores/cart'
 import { useTRPC } from '@/lib/trpc/client'
 import { SkeletonCard } from '@/components/ui/SkeletonCard'
 import { PhoneInput } from '@/components/forms/PhoneInput'
@@ -117,17 +122,31 @@ export default function CheckoutPage() {
 
   const handleConfirm = () => {
     createBooking.mutate({
-      // Seuls le créneau et le nombre de participants partent : aucun montant.
-      // Le serveur relit le prix en base et recalcule tout.
+      // Ni prix ni jours facturés ne partent d'ici : le serveur relit
+      // `Activity.priceHt`, recompte `billedDays` et recalcule tout. Envoyer un
+      // montant, même juste, reviendrait à le croire.
       //
-      // `mode: 'slot'` en dur pour l'instant : le panier ne sait porter que des
-      // créneaux. Les lignes à la journée arrivent avec le tunnel public (B2),
-      // qui donnera au panier une clé de ligne autre que le seul `slotId`.
-      items: cart.items.map((item) => ({
-        mode: 'slot' as const,
-        slotId: item.slotId,
-        participants: item.participants,
-      })),
+      // Le `mode` vient désormais de la LIGNE, plus d'un littéral : le panier
+      // porte les deux formes, et l'union discriminée de `CartItem` est la même
+      // que celle qu'attend `bookingLineSchema` — les deux cas sont donc
+      // impossibles à oublier.
+      items: cart.items.map((item) =>
+        item.mode === 'daily'
+          ? {
+              mode: 'daily' as const,
+              activityId: item.activityId,
+              startDate: item.period.startDate,
+              startTime: item.period.startTime,
+              endDate: item.period.endDate,
+              endTime: item.period.endTime,
+              participants: item.participants,
+            }
+          : {
+              mode: 'slot' as const,
+              slotId: item.slotId,
+              participants: item.participants,
+            },
+      ),
       contactPhone: phone.trim(),
     })
   }
@@ -299,7 +318,7 @@ export default function CheckoutPage() {
                     >
                       <div className="px-6 pb-4 space-y-3">
                         {cart.items.map((item) => (
-                          <div key={item.slotId} className="flex gap-3">
+                          <div key={cartItemKey(item)} className="flex gap-3">
                             <div className="relative w-12 h-12 rounded-lg overflow-hidden flex-shrink-0">
                               <Image
                                 src={item.activity.imageUrl}
@@ -313,8 +332,10 @@ export default function CheckoutPage() {
                                 {item.activity.title}
                               </p>
                               <p className="text-xs text-muted">
-                                {item.slot.date} à {item.slot.time} ·{' '}
-                                {item.participants} pers.
+                                {item.mode === 'daily'
+                                  ? `Du ${item.period.startDate} au ${item.period.endDate}`
+                                  : `${item.slot.date} à ${item.slot.time}`}{' '}
+                                · {item.participants} pers.
                               </p>
                             </div>
                           </div>
