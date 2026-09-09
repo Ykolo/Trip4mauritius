@@ -66,7 +66,15 @@ export function PhoneInput({
           value={dial}
           disabled={disabled}
           onChange={(e) => onChange(joinPhone(e.target.value, parsed.national))}
-          className="h-12 px-2 rounded-xl border border-surface bg-base text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
+          // Un `<select>` prend pour largeur intrinsèque celle de sa plus
+          // longue option — ici « +971 · Émirats arabes unis », soit 217 px. Il
+          // ne descend jamais en dessous sans `min-w-0`, et volait au champ du
+          // numéro la place d'afficher « 5789 1234 » sur un écran de 375 px.
+          //
+          // La borne ne coupe QUE le libellé refermé, et par la fin :
+          // l'indicatif — la seule partie qu'on relit pour se vérifier — reste
+          // visible, et la liste déroulée montre les intitulés entiers.
+          className="h-12 px-2 min-w-0 max-w-[8rem] sm:max-w-[14rem] rounded-xl border border-surface bg-base text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
         >
           {DIAL_CODES.map((entry) => (
             <option key={entry.code} value={entry.code}>

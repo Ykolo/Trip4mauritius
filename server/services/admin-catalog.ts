@@ -249,11 +249,17 @@ export async function updateActivityForAdmin(
  * Table explicite plutôt qu'une suite de `if` : c'est la liste que l'on relit
  * quand on se demande si l'admin peut ressusciter une fiche archivée (oui) ou
  * republier sans créneau (non, garde plus bas).
+ *
+ * Elle se lit aujourd'hui « tout état sauf lui-même », et un `{ not: status }`
+ * dirait la même chose en une ligne. On garde la table quand même : ce qu'elle
+ * énonce, c'est que le graphe est COMPLET — chaque case a été regardée. Le
+ * raccourci, lui, autoriserait d'office toute transition vers un état futur,
+ * sans que personne n'ait eu à se prononcer.
  */
 const ALLOWED_FROM: Record<AdminActivityStatus, ActivityStatus[]> = {
-  draft: ['pending_moderation', 'published', 'rejected', 'archived'],
-  published: ['draft', 'pending_moderation', 'rejected', 'archived'],
-  archived: ['draft', 'pending_moderation', 'published', 'rejected'],
+  draft: ['published', 'archived'],
+  published: ['draft', 'archived'],
+  archived: ['draft', 'published'],
 }
 
 export async function setActivityStatusForAdmin(

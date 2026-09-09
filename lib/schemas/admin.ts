@@ -154,16 +154,7 @@ export type UpdateOperatorInput = z.infer<typeof updateOperatorSchema>
 export const adminActivitiesSchema = z.object({
   page,
   search,
-  status: z
-    .enum([
-      'all',
-      'draft',
-      'pending_moderation',
-      'published',
-      'rejected',
-      'archived',
-    ])
-    .default('all'),
+  status: z.enum(['all', 'draft', 'published', 'archived']).default('all'),
   operatorId: z.string().trim().min(1).optional(),
 })
 
@@ -178,12 +169,19 @@ export const adminUpdateActivitySchema = z.object({
 })
 
 /**
- * Les seuls statuts qu'un admin pose à la main.
+ * Les statuts qu'un admin pose à la main.
  *
- * `pending_moderation` et `rejected` en sont absents : ce sont les états de la
- * file de modération, produits par la soumission d'un opérateur et par
- * `rejectActivity`. Les rendre posables ici donnerait deux chemins vers le même
- * état, dont un sans la garde de concurrence de la file.
+ * C'est aujourd'hui l'énumération ENTIÈRE : `pending_moderation` et `rejected`
+ * en étaient exclus tant qu'ils existaient, parce que la file de modération les
+ * produisait elle-même sous sa propre garde de concurrence. Cette file a
+ * disparu au lot 13 et les deux valeurs avec elle — il ne reste donc plus
+ * d'état que l'admin ne puisse pas choisir, et c'est ce que l'écran offre.
+ *
+ * La liste reste néanmoins déclarée ici plutôt que dérivée de `ActivityStatus` :
+ * « ce que la colonne peut contenir » et « ce qu'un humain peut poser depuis le
+ * back-office » sont deux questions distinctes, et leur égalité actuelle est un
+ * fait, pas une règle. Le jour où un état machine apparaît, c'est cette ligne
+ * qu'on ne veut pas voir le suivre en silence.
  */
 export const adminActivityStatusSchema = z.object({
   activityId: z.string().min(1),

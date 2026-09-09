@@ -50,14 +50,22 @@ export interface OperatorActivitySummary {
   imageUrl: string
   priceHT: number
   status: ActivityStatus
+  /**
+   * Sur créneau ou à la journée — décide de tout le reste du formulaire.
+   *
+   * Sur le SOMMAIRE et pas seulement sur le détail, parce que la règle de
+   * publication en dépend (`assertPublishable`) : une location à la journée n'a
+   * aucun créneau et se publie quand même. Les listings qui grisent « Mettre en
+   * ligne » sur `slotCount === 0` doivent pouvoir faire l'exception sans avoir
+   * à tirer la fiche complète de chaque ligne.
+   */
+  bookingMode: 'slot' | 'daily'
   slotCount: number
   bookingsCount: number
 }
 
 export interface OperatorActivityDetail extends OperatorActivitySummary {
   duration: string
-  /** Sur créneau ou à la journée — décide de tout le reste du formulaire. */
-  bookingMode: 'slot' | 'daily'
   /** Durée réelle en mode créneau ; `null` en mode journée. */
   durationMinutes: number | null
   /** Stock d'unités louables en mode journée ; `null` en mode créneau. */

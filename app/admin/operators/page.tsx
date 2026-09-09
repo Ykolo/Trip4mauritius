@@ -63,11 +63,25 @@ function CreateOperatorForm({ onDone }: { onDone: () => void }) {
         setError(null)
         create.mutate({ email, name, displayName, whatsapp })
       }}
-      className="bg-white rounded-2xl shadow-card p-6 mb-6 space-y-4"
+      className="bg-white rounded-2xl shadow-card p-4 sm:p-6 mb-6 space-y-4"
     >
       <h2 className="font-semibold text-ink">Nouvel opérateur</h2>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      {/* `grid-cols-1` EXPLICITE, et pas seulement `md:grid-cols-3`.
+
+          Sans template, une grille n'a qu'une colonne `auto` — c'est-à-dire
+          dimensionnée au max-content de son élément le plus large, sans jamais
+          descendre en dessous. Ici le `<select>` d'indicatif (large comme sa
+          plus longue option, « +971 · Émirats arabes unis ») et les phrases
+          d'aide portaient cette colonne à 575 px : la page entière défilait
+          horizontalement sur 607 px pour un écran de 375. C'était CELA, le
+          défaut de responsivité de cet écran — pas les cartes en dessous.
+
+          `grid-cols-1` vaut `repeat(1, minmax(0, 1fr))` : le `0` autorise la
+          colonne à passer sous la largeur intrinsèque de son contenu. C'est
+          exactement le piège `min-width: auto` déjà rencontré sur la barre
+          d'onglets de `app/admin/layout.tsx`. */}
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
         <label className="block">
           <span className="text-sm text-muted">Nom commercial</span>
           <input
@@ -131,7 +145,7 @@ function CreateOperatorForm({ onDone }: { onDone: () => void }) {
       <button
         type="submit"
         disabled={create.isPending}
-        className="inline-flex items-center gap-2 bg-primary text-white font-semibold px-5 py-2.5 rounded-xl disabled:opacity-60"
+        className="inline-flex w-full sm:w-auto items-center justify-center gap-2 bg-primary text-white font-semibold px-5 py-2.5 rounded-xl disabled:opacity-60"
       >
         {create.isPending ? (
           <Loader2 className="w-4 h-4 animate-spin" />
@@ -200,7 +214,21 @@ function EditOperatorForm({
       }}
       className="mt-4 pt-4 border-t border-muted/10 space-y-4"
     >
-      <div className="grid gap-4 md:grid-cols-3">
+      {/* `grid-cols-1` EXPLICITE, et pas seulement `md:grid-cols-3`.
+
+          Sans template, une grille n'a qu'une colonne `auto` — c'est-à-dire
+          dimensionnée au max-content de son élément le plus large, sans jamais
+          descendre en dessous. Ici le `<select>` d'indicatif (large comme sa
+          plus longue option, « +971 · Émirats arabes unis ») et les phrases
+          d'aide portaient cette colonne à 575 px : la page entière défilait
+          horizontalement sur 607 px pour un écran de 375. C'était CELA, le
+          défaut de responsivité de cet écran — pas les cartes en dessous.
+
+          `grid-cols-1` vaut `repeat(1, minmax(0, 1fr))` : le `0` autorise la
+          colonne à passer sous la largeur intrinsèque de son contenu. C'est
+          exactement le piège `min-width: auto` déjà rencontré sur la barre
+          d'onglets de `app/admin/layout.tsx`. */}
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
         <label className="block">
           <span className="text-sm text-muted">Nom commercial</span>
           <input
@@ -269,7 +297,7 @@ function EditOperatorForm({
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <button
           type="submit"
           disabled={save.isPending}
@@ -365,7 +393,12 @@ function DangerZone({
             {operator.activityCount > 1 ? 's' : ''}.
           </p>
           {confirming ? (
-            <div className="flex items-center gap-2">
+            // `flex-wrap` : « Confirmer la suppression » et « Annuler » côte à
+            // côte font ~310 px de contenu, pour 343 px utiles sur un écran de
+            // 375 px une fois le `p-4` de la carte retiré. Sans le repli, les
+            // deux boutons débordaient de la carte au premier nom d'opérateur
+            // un peu long — et c'est le geste le plus destructeur de l'écran.
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 disabled={pending}
@@ -444,14 +477,26 @@ function OperatorRow({
 
   return (
     <li
-      className={`bg-white rounded-2xl shadow-card p-5 ${
+      className={`bg-white rounded-2xl shadow-card p-4 sm:p-5 ${
         operator.active ? '' : 'opacity-70'
       }`}
     >
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex items-start justify-between gap-3 sm:gap-4">
+        {/* `break-words` et non `truncate`.
+
+            L'email d'un opérateur est la SEULE information qui permette de le
+            reconnaître quand deux enseignes portent un nom voisin — et c'est
+            aussi son identifiant de connexion, celui qu'on vient vérifier ici
+            après une faute de frappe. `truncate` le coupait à
+            « contact@blue-saf… » dès 375 px : l'écran restait dans ses bornes,
+            mais en cachant précisément ce qu'on était venu lire.
+
+            `min-w-0` reste indispensable — un élément flex ne descend pas sous
+            la largeur intrinsèque de son contenu sans lui, et un email sans
+            espace ne se casse nulle part. */}
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <p className="font-semibold text-ink truncate">
+            <p className="font-semibold text-ink break-words">
               {operator.displayName}
             </p>
             {!operator.active && (
@@ -460,7 +505,7 @@ function OperatorRow({
               </span>
             )}
           </div>
-          <p className="text-sm text-muted truncate">
+          <p className="text-sm text-muted break-words">
             {operator.userName} · {operator.userEmail}
           </p>
           <p className="text-xs text-muted mt-0.5">
@@ -472,13 +517,18 @@ function OperatorRow({
           </p>
         </div>
 
+        {/* Icône seule sous 640 px : « Modifier » prenait 100 px des 343 px
+            utiles, au détriment de la colonne d'identité juste à gauche. */}
         <button
           type="button"
           onClick={() => setEditing((v) => !v)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-muted/30 text-sm font-medium shrink-0"
+          aria-label={editing ? 'Fermer la fiche' : "Modifier l'opérateur"}
+          className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg border border-muted/30 text-sm font-medium shrink-0"
         >
           <Pencil className="w-3.5 h-3.5" />
-          {editing ? 'Fermer' : 'Modifier'}
+          <span className="hidden sm:inline">
+            {editing ? 'Fermer' : 'Modifier'}
+          </span>
         </button>
       </div>
 
@@ -521,9 +571,11 @@ export default function AdminOperatorsPage() {
   }
 
   return (
-    <div className="p-6 md:p-10 max-w-5xl mx-auto">
+    <div className="p-4 sm:p-6 md:p-10 max-w-5xl mx-auto">
       <header className="mb-6">
-        <h1 className="font-body font-bold text-3xl text-ink">Opérateurs</h1>
+        <h1 className="font-body font-bold text-2xl sm:text-3xl text-ink">
+          Opérateurs
+        </h1>
         <p className="text-muted mt-1">
           Les prestataires référencés sur la plateforme. Vous seul pouvez en
           créer, les modifier et les retirer.
@@ -542,7 +594,7 @@ export default function AdminOperatorsPage() {
           ))}
         </div>
       ) : operators.length === 0 ? (
-        <div className="bg-white rounded-2xl shadow-card p-10 text-center">
+        <div className="bg-white rounded-2xl shadow-card p-6 sm:p-10 text-center">
           <Store className="w-8 h-8 text-muted mx-auto mb-3" />
           <p className="text-muted text-sm">
             Aucun opérateur pour le moment.
