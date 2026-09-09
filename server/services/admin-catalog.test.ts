@@ -62,7 +62,9 @@ async function makeOperator(label: string) {
   })
 }
 
-async function activityInput(): Promise<ActivityInput> {
+async function activityInput(
+  overrides: Partial<ActivityInput> = {},
+): Promise<ActivityInput> {
   return {
     // Le slug est dérivé du titre : ce préfixe est ce que `cleanup` ramasse.
     title: `${TEST_PREFIX}sortie ${stamp()}`,
@@ -80,6 +82,7 @@ async function activityInput(): Promise<ActivityInput> {
     imageUrls: ['/images/test.jpg'],
     included: ['Guide'],
     excluded: [],
+    ...overrides,
   }
 }
 
@@ -206,6 +209,31 @@ describe('mise en ligne', () => {
     // verdict adressé à un opérateur.
     const back = await setActivityStatusForAdmin(draft.id, 'draft')
     expect(back.status).toBe('draft')
+  })
+
+  it('met en ligne une activité à la journée sans exiger de créneau', async () => {
+    const operator = await makeOperator('e-daily')
+    const draft = await createActivityForAdmin(
+      operator.id,
+      await activityInput({
+        bookingMode: 'daily',
+        duration: 'Journée',
+        durationMinutes: undefined,
+        dailyUnits: 3,
+      }),
+    )
+
+    // La garde sur les créneaux est l'un des trois écarts que ce fichier
+    // protège — encore faut-il qu'elle ne s'applique qu'au mode qui a des
+    // créneaux. Passer par `setActivityStatusForAdmin`, et non par un
+    // `status: 'published'` posé en base, est TOUT l'objet du test : c'est le
+    // contournement qui avait masqué le blocage.
+    const online = await setActivityStatusForAdmin(draft.id, 'published')
+    expect(online.status).toBe('published')
+
+    expect(
+      await db.activitySlot.count({ where: { activityId: draft.id } }),
+    ).toBe(0)
   })
 
   it('refuse une transition vers un état déjà atteint', async () => {

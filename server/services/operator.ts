@@ -7,6 +7,7 @@ import {
 } from '@/lib/datetime'
 import type { ActivityInput, SlotInput } from '@/lib/schemas/operator'
 import {
+  assertPublishable,
   toActivityWriteData,
   uniqueSlug,
 } from '@/server/services/activity-write'
@@ -286,16 +287,10 @@ export async function publishOwnActivity(
     })
   }
 
-  const slots = await db.activitySlot.count({
-    where: { activityId, startsAt: { gte: new Date() } },
-  })
-
-  if (slots === 0) {
-    throw new TRPCError({
-      code: 'BAD_REQUEST',
-      message: 'Ajoutez au moins un créneau à venir avant de mettre en ligne.',
-    })
-  }
+  // La règle dépend du mode de vente et vit dans `activity-write.ts` : une
+  // location à la journée n'a aucun créneau, lui imposer d'en avoir un la
+  // rendait impubliable pour toujours.
+  await assertPublishable(activityId)
 
   await db.activity.update({
     where: { id: activityId },

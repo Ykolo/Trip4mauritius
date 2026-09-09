@@ -1,3 +1,4 @@
+import { TRPCError } from '@trpc/server'
 import { db } from '@/lib/db'
 import { durationLabel } from '@/lib/durations'
 import type { ActivityInput } from '@/lib/schemas/operator'
@@ -88,5 +89,47 @@ export function toActivityWriteData(input: ActivityInput) {
     included: input.included,
     excluded: input.excluded,
     description: input.description,
+  }
+}
+
+/**
+ * Refuse la mise en ligne d'une fiche que personne ne pourrait réserver.
+ *
+ * La règle DÉPEND du mode de vente, et c'est tout l'objet de cette fonction :
+ *
+ * - `slot` — il faut au moins un départ à venir. Sans cela, la fiche est
+ *   indexée par les moteurs et réservable par personne : c'est le seul contrôle
+ *   de publication qui ait survécu à la suppression de la modération.
+ * - `daily` — il n'y a AUCUN créneau, par construction. Une location est
+ *   réservable en permanence, et c'est `dailyUnits` qui la borne. Lui appliquer
+ *   la règle des créneaux la rendait impubliable pour toujours — le mode
+ *   journée n'existait alors que dans les tests.
+ *
+ * Déclarée ici, dans le module d'écriture commun, parce que les deux surfaces
+ * qui publient l'appliquent : `publishOwnActivity` côté opérateur et
+ * `setActivityStatusForAdmin` côté back-office. Recopiée, elle aurait divergé —
+ * et c'est exactement ce qui venait de se produire.
+ */
+export async function assertPublishable(activityId: string): Promise<void> {
+  const activity = await db.activity.findUnique({
+    where: { id: activityId },
+    select: { bookingMode: true },
+  })
+
+  if (!activity) {
+    throw new TRPCError({ code: 'NOT_FOUND', message: 'Activité introuvable.' })
+  }
+
+  if (activity.bookingMode === 'daily') return
+
+  const upcoming = await db.activitySlot.count({
+    where: { activityId, startsAt: { gte: new Date() } },
+  })
+
+  if (upcoming === 0) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Ajoutez au moins un créneau à venir avant de mettre en ligne.',
+    })
   }
 }
