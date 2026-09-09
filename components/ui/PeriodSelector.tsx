@@ -3,6 +3,7 @@
 import { fr } from 'date-fns/locale'
 import type { DateRange } from 'react-day-picker'
 import { Calendar } from '@/components/ui/calendar'
+import { mauritiusDate, mauritiusTime } from '@/lib/datetime'
 
 // Choix de la période, en mode journée.
 //
@@ -58,15 +59,45 @@ function fromDateString(value: string): Date {
   return new Date(year, month - 1, day)
 }
 
+/**
+ * Premier jour RÉELLEMENT réservable.
+ *
+ * `createDailyBooking` refuse toute période déjà commencée. Or le retrait est
+ * fixé à `DEFAULT_PICKUP_TIME` : passé cette heure-là, le jour même n'est plus
+ * réservable, et le laisser cliquable menait le touriste jusqu'au bout du
+ * tunnel pour lui répondre « cette période a déjà commencé » — un cul-de-sac
+ * qu'aucun message d'erreur ne rattrape puisque le calendrier, lui, montrait
+ * la date comme disponible.
+ *
+ * Le calcul se fait en heure MAURICIENNE, pas locale, et c'est le fond du
+ * problème : `new Date()` chez un visiteur à Los Angeles peut encore être la
+ * veille de la date mauricienne. Comparer son minuit à lui aurait ouvert un
+ * jour déjà écoulé à Maurice, ou fermé un jour encore ouvert.
+ *
+ * Le `Date` rendu, lui, est à minuit LOCAL : c'est ce que react-day-picker
+ * compare à ses propres cases, elles aussi à minuit local.
+ */
+function firstSelectableDay(): Date {
+  const now = new Date()
+  const [year, month, day] = mauritiusDate(now).split('-').map(Number)
+  const first = new Date(year, month - 1, day)
+
+  // Comparaison lexicographique de deux `HH:mm` — équivalente à la comparaison
+  // numérique tant que les deux sont sur deux chiffres, ce que garantit le
+  // formateur de `lib/datetime.ts`.
+  if (mauritiusTime(now) >= DEFAULT_PICKUP_TIME) {
+    first.setDate(first.getDate() + 1)
+  }
+
+  return first
+}
+
 export function PeriodSelector({ value, onChange }: PeriodSelectorProps) {
   const selected: DateRange | undefined = value
     ? { from: fromDateString(value.startDate), to: fromDateString(value.endDate) }
     : undefined
 
-  // Aujourd'hui à minuit local : `createDailyBooking` refuse toute période déjà
-  // commencée, autant ne pas la laisser cliquer.
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  const firstDay = firstSelectableDay()
 
   const handleSelect = (range: DateRange | undefined) => {
     if (!range?.from) return onChange(null)
@@ -99,7 +130,8 @@ export function PeriodSelector({ value, onChange }: PeriodSelectorProps) {
           locale={fr}
           selected={selected}
           onSelect={handleSelect}
-          disabled={{ before: today }}
+          disabled={{ before: firstDay }}
+          defaultMonth={firstDay}
           className="rounded-2xl border border-surface"
         />
       </div>

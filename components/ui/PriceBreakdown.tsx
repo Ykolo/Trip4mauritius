@@ -334,9 +334,10 @@ export function PriceBreakdown({
                passe à 96 px, ce qui la dégage franchement.
 
                Sur mobile, il faut dégager DEUX barres empilées : la navigation
-               (0 → 64 px) et le bandeau d'acompte juste au-dessus (64 →
-               ~122 px). D'où 128 px, et non plus 96. */
-            className="fixed bottom-32 md:bottom-24 left-1/2 -translate-x-1/2 bg-ink border border-white/10 text-white px-5 py-3 rounded-full shadow-2xl flex items-center gap-3 z-[70] font-body text-sm font-medium"
+               (0 → 64 px) et le bandeau d'acompte juste au-dessus, mesuré à
+               124 px de haut. D'où 144 px : 128 px la posaient à 4 px du
+               bandeau, ce qui se lit comme un chevauchement. */
+            className="fixed bottom-36 md:bottom-24 left-1/2 -translate-x-1/2 bg-ink border border-white/10 text-white px-5 py-3 rounded-full shadow-2xl flex items-center gap-3 z-[70] font-body text-sm font-medium"
           >
             <div className="w-6 h-6 rounded-full bg-green-500/20 flex items-center justify-center">
               <Check className="w-4 h-4 text-green-400" />

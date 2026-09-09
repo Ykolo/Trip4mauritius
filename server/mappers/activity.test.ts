@@ -46,6 +46,21 @@ describe('heure de fin dérivée', () => {
     expect(mapped.endTime).toBe('02:00')
   })
 
+  it('renonce à la plage au-delà de 24 h, plutôt que d’afficher une durée nulle', () => {
+    // Une sortie de 24 h affichait « 09:00 – 09:00 » et une de 30 h
+    // « 09:00 – 15:00 » : la première se lit comme une durée nulle, la seconde
+    // comme six heures. Le schéma autorise jusqu'à 14 jours en mode créneau, le
+    // cas n'est pas théorique. L'écran retombe sur l'heure de départ, qui reste
+    // vraie.
+    const start = new Date('2026-10-12T05:00:00Z')
+
+    expect(toActivitySlot(slot(start), 24 * 60).endTime).toBeNull()
+    expect(toActivitySlot(slot(start), 30 * 60).endTime).toBeNull()
+
+    // Juste en dessous, la plage garde son sens — y compris à cheval sur minuit.
+    expect(toActivitySlot(slot(start), 24 * 60 - 1).endTime).toBe('08:59')
+  })
+
   it('convertit toujours spotsTaken en spotsLeft', () => {
     // La base stocke le compteur croissant, le front lit ce qu'il reste. La
     // conversion n'existe qu'ici.
