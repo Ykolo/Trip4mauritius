@@ -48,7 +48,7 @@ export function SlotSelector({
           return (
             <div
               key={slot.id}
-              className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-3 border-b border-muted/30 transition-colors ${
+              className={`flex flex-wrap items-center gap-x-4 gap-y-1 py-3 border-b border-muted/30 transition-colors ${
                 isSelected ? 'bg-primary/10' : ''
               } ${isFull ? 'opacity-50' : ''}`}
             >
@@ -73,7 +73,7 @@ export function SlotSelector({
                 </span>
               </div>
 
-              <div className="flex items-center gap-3 ml-auto sm:gap-4">
+              <div className="flex items-center gap-3 ml-auto">
                 <span className="text-muted text-sm">
                   {isFull
                     ? 'Complet'
