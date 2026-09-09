@@ -9,6 +9,8 @@ import {
 } from '@/server/services/admin'
 import { listOperatorOptions } from '@/server/services/admin-catalog'
 import { listActivities } from '@/server/services/activity'
+import { createCaller } from '@/server/trpc/root'
+import { FEATURE_DEFAULTS } from '@/lib/features'
 import {
   createActivity,
   createSlots,
@@ -483,6 +485,62 @@ describe('désactivation d\'un opérateur', () => {
 
     const activity = await db.activity.findUnique({ where: { id: activityId } })
     expect(activity?.status).toBe('archived')
+  })
+
+  it('ferme l\'espace opérateur MÊME si la session porte encore le rôle', async () => {
+    // Le trou que la seule rétrogradation de rôle laissait ouvert.
+    //
+    // `ctx.user.role` vient de la session, pas de la base : après
+    // `setOperatorActive(false)`, le rôle reste `operator` dans la session
+    // jusqu'au rafraîchissement de son cache — jusqu'à 5 minutes. On forge donc
+    // ici exactement cette session périmée, et on vérifie que
+    // `operatorProcedure` refuse quand même, sur la foi de `operator.active`.
+    const { operatorId, email } = await operatorWithActivity('espace')
+    const user = await db.user.findUniqueOrThrow({ where: { email } })
+
+    const caller = createCaller({
+      db,
+      headers: new Headers(),
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        // La session d'AVANT la désactivation.
+        role: 'operator',
+      },
+      features: { ...FEATURE_DEFAULTS },
+    })
+
+    // Avant : l'accès fonctionne.
+    await expect(caller.operator.listActivities()).resolves.toBeDefined()
+
+    await setOperatorActive({ operatorId, active: false })
+
+    await expect(caller.operator.listActivities()).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    })
+  })
+
+  it('rouvre l\'espace opérateur à la réactivation', async () => {
+    const { operatorId, email } = await operatorWithActivity('reouverture')
+    const user = await db.user.findUniqueOrThrow({ where: { email } })
+
+    const caller = createCaller({
+      db,
+      headers: new Headers(),
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: 'operator',
+      },
+      features: { ...FEATURE_DEFAULTS },
+    })
+
+    await setOperatorActive({ operatorId, active: false })
+    await setOperatorActive({ operatorId, active: true })
+
+    await expect(caller.operator.listActivities()).resolves.toBeDefined()
   })
 
   it('sort du sélecteur d\'opérateurs de la création de fiche', async () => {
