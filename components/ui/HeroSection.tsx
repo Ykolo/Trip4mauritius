@@ -42,10 +42,10 @@ export function HeroSection() {
         blurDataURL={BLUR_DATA_URL}
         className="object-cover"
       />
-      
+
       {/* Glassmorphism Overlay */}
       <div className="absolute inset-0 backdrop-blur-sm bg-white/20" />
-      
+
       {/* Content */}
       <motion.div
         initial={{ opacity: 0, y: 30 }}
@@ -59,7 +59,7 @@ export function HeroSection() {
         <p className="font-sans font-light text-white/90 text-lg md:text-xl mb-8 max-w-2xl mx-auto">
           Le guide des plus belles expériences
         </p>
-        
+
         {/* Search Bar */}
         <div className="bg-white rounded-2xl shadow-card p-4 md:p-6">
           <div className="flex flex-col md:flex-row gap-3 md:gap-4">
@@ -76,9 +76,9 @@ export function HeroSection() {
                 className="w-full h-12 pl-10 pr-4 rounded-xl border border-border bg-base text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
-            
+
             {/* Region Select */}
-            <div className="md:w-40">
+            <div className="md:w-44">
               <select
                 value={region}
                 onChange={(e) => setRegion(e.target.value)}
@@ -90,7 +90,7 @@ export function HeroSection() {
                 ))}
               </select>
             </div>
-            
+
             {/* Search Button */}
             <button
               onClick={handleSearch}
