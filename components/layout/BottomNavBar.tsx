@@ -58,21 +58,23 @@ export function BottomNavBar() {
             l'invitation à ceux qui l'utilisent déjà. La destination, elle, ne
             change pas — le client veut être joint là.
 
-            SEUL élément plein de la barre, en pastille pleine largeur de
-            texte : le contact est la conversion attendue de ce site, il ne
-            peut pas se présenter comme un quatrième onglet parmi les autres.
+            Même présentation que les trois onglets voisins : une pastille
+            pleine a été essayée puis écartée, elle déséquilibrait la barre.
             `aria-label` conserve la mention WhatsApp — annoncer la sortie vers
-            une application tierce est utile à qui ne voit pas l'icône. */}
+            une application tierce est utile à qui ne voit pas l'icône.
+
+            Pas d'état actif : ce lien ne correspond à aucune page du site,
+            aucun `pathname` ne peut le désigner. */}
         {showWhatsapp && (
           <a
             href={whatsappHref()}
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Nous contacter sur WhatsApp"
-            className="flex items-center gap-2 h-11 min-w-[48px] px-4 rounded-full bg-primary text-white shadow-card ring-4 ring-primary/10 active:scale-95 transition-transform"
+            className="relative flex flex-col items-center justify-center min-w-[48px] min-h-[48px] px-3 text-muted active:scale-95 transition-transform"
           >
             <MessageCircle className="w-5 h-5" />
-            <span className="text-sm font-body font-semibold">Contact</span>
+            <span className="text-xs font-body font-medium mt-1">Contact</span>
           </a>
         )}
       </div>
