@@ -85,9 +85,10 @@ export async function listBookingsForAdmin(
   if (filters.status !== 'all') where.status = filters.status
 
   if (filters.period !== 'all') {
-    where.slot = {
-      startsAt: filters.period === 'upcoming' ? { gte: now } : { lt: now },
-    }
+    // `booking.startsAt` et non `slot.startsAt` : une location à la journée n'a
+    // pas de créneau, et un filtre passant par la relation l'aurait exclue du
+    // listing sans que rien ne le signale.
+    where.startsAt = filters.period === 'upcoming' ? { gte: now } : { lt: now }
   }
 
   if (filters.search) {
@@ -106,13 +107,9 @@ export async function listBookingsForAdmin(
       where,
       include: {
         user: true,
-        slot: {
-          include: { activity: { include: { operator: { include: { user: true } } } } },
-        },
+        activity: { include: { operator: { include: { user: true } } } },
       },
-      orderBy: {
-        slot: { startsAt: filters.period === 'upcoming' ? 'asc' : 'desc' },
-      },
+      orderBy: { startsAt: filters.period === 'upcoming' ? 'asc' : 'desc' },
       skip: (filters.page - 1) * ROWS_PER_PAGE,
       take: ROWS_PER_PAGE,
     }),
@@ -126,12 +123,16 @@ export async function listBookingsForAdmin(
       status: booking.status as BookingStatus,
       createdAt: booking.createdAt.toISOString(),
 
-      date: mauritiusDate(booking.slot.startsAt),
-      time: mauritiusTime(booking.slot.startsAt),
-      departed: booking.slot.startsAt.getTime() < now.getTime(),
+      mode: booking.slotId === null ? ('daily' as const) : ('slot' as const),
+      date: mauritiusDate(booking.startsAt),
+      time: mauritiusTime(booking.startsAt),
+      endDate: booking.endsAt ? mauritiusDate(booking.endsAt) : null,
+      endTime: booking.endsAt ? mauritiusTime(booking.endsAt) : null,
+      billedDays: booking.billedDays,
+      departed: booking.startsAt.getTime() < now.getTime(),
 
-      activityTitle: booking.slot.activity.title,
-      activitySlug: booking.slot.activity.slug,
+      activityTitle: booking.activity.title,
+      activitySlug: booking.activity.slug,
       participants: booking.participants,
       totalPrice: booking.totalPrice.toNumber(),
       depositDue: booking.depositDue.toNumber(),
@@ -141,10 +142,10 @@ export async function listBookingsForAdmin(
       touristEmail: booking.user.email,
       contactPhone: booking.contactPhone,
 
-      operatorId: booking.slot.activity.operator.id,
-      operatorName: booking.slot.activity.operator.displayName,
-      operatorEmail: booking.slot.activity.operator.user.email,
-      operatorWhatsapp: booking.slot.activity.operator.whatsapp,
+      operatorId: booking.activity.operator.id,
+      operatorName: booking.activity.operator.displayName,
+      operatorEmail: booking.activity.operator.user.email,
+      operatorWhatsapp: booking.activity.operator.whatsapp,
     })),
     total,
     pages: Math.max(1, Math.ceil(total / ROWS_PER_PAGE)),
@@ -217,7 +218,11 @@ export async function setBookingStatus(input: {
       })
     }
 
-    if (input.status === 'cancelled') {
+    // Rendre les places, UNIQUEMENT en mode créneau. Une location à la journée
+    // n'a pas de compteur à recréditer : sa période redevient libre du seul
+    // fait que le statut n'est plus actif, puisque la disponibilité s'y calcule
+    // en comptant les réservations actives qui chevauchent.
+    if (input.status === 'cancelled' && booking.slotId !== null) {
       // Soustraction franche, sans GREATEST(0, …) : la garde de statut
       // ci-dessus rend le double décrément impossible, et le CHECK
       // `spotsTaken >= 0` doit rester capable de signaler une régression au
@@ -246,41 +251,263 @@ export async function listOperators(): Promise<AdminOperator[]> {
     orderBy: { createdAt: 'desc' },
   })
 
-  return rows.map((operator) => ({
-    operatorId: operator.id,
-    userId: operator.user.id,
-    displayName: operator.displayName,
-    userName: operator.user.name,
-    userEmail: operator.user.email,
-    whatsapp: operator.whatsapp,
-    activityCount: operator._count.activities,
-    createdAt: operator.createdAt.toISOString(),
-  }))
+  // Comptage des réservations en DEUX requêtes, pas une par opérateur : le
+  // listing n'est pas paginé, et un `count` par ligne ferait autant
+  // d'allers-retours vers Neon qu'il y a de prestataires.
+  //
+  // Le regroupement se fait sur `bookings.activityId`, que le lot B a rendu
+  // obligatoire. Il fallait auparavant passer par le créneau — et ce détour
+  // aurait laissé les locations à la journée hors du compte, donc rendu
+  // supprimable un loueur qui a vendu.
+  const counts = await db.booking.groupBy({
+    by: ['activityId'],
+    _count: { _all: true },
+    where: { activity: { operatorId: { in: rows.map((o) => o.id) } } },
+  })
+
+  const owners = await db.activity.findMany({
+    where: { id: { in: counts.map((c) => c.activityId) } },
+    select: { id: true, operatorId: true },
+  })
+
+  const ownerByActivity = new Map(owners.map((a) => [a.id, a.operatorId]))
+
+  // `groupBy` ne remonte que les activités qui ont au moins une réservation —
+  // d'où le `?? 0` à la lecture, et non une Map pré-remplie qui laisserait
+  // croire que la valeur manquante est une anomalie.
+  const bookingsByOperator = new Map<string, number>()
+  for (const row of counts) {
+    const operatorId = ownerByActivity.get(row.activityId)
+    if (!operatorId) continue
+    bookingsByOperator.set(
+      operatorId,
+      (bookingsByOperator.get(operatorId) ?? 0) + row._count._all,
+    )
+  }
+
+  return rows.map((operator) => {
+    const bookingCount = bookingsByOperator.get(operator.id) ?? 0
+
+    return {
+      operatorId: operator.id,
+      userId: operator.user.id,
+      displayName: operator.displayName,
+      userName: operator.user.name,
+      userEmail: operator.user.email,
+      whatsapp: operator.whatsapp,
+      avatarUrl: operator.avatarUrl,
+      activityCount: operator._count.activities,
+      bookingCount,
+      // La règle est DÉRIVÉE ici et nulle part ailleurs. `deleteOperator` la
+      // revérifie dans sa transaction : cette valeur-ci sert à dessiner le bon
+      // bouton, pas à autoriser quoi que ce soit.
+      deletable: bookingCount === 0,
+      active: operator.active,
+      createdAt: operator.createdAt.toISOString(),
+    }
+  })
 }
 
 /**
- * Renseigne ou retire le numéro WhatsApp d'un opérateur.
+ * Rôles qu'aucun chemin de ce fichier ne RÉTROGRADE, jamais.
+ *
+ * Déclaré une seule fois : la garde vit dans quatre fonctions, et une liste
+ * recopiée qui perdrait `superadmin` retirerait à Kled son accès aux
+ * interrupteurs de fonctionnalité — en silence, au détour d'une désactivation
+ * d'opérateur.
+ */
+const PRIVILEGED_ROLES = ['admin', 'superadmin']
+
+/**
+ * Édite la fiche d'un opérateur : identité commerciale, contact, coordonnées.
  *
  * Non filtré par opérateur, et c'est voulu : l'admin corrige la fiche de
  * n'importe quel prestataire — même logique que `admin-catalog.ts`. Un
- * opérateur ne peut PAS modifier ce champ depuis son espace : le back-office
- * s'en sert pour le joindre, le laisser le réécrire lui donnerait le moyen de
- * se rendre injoignable en silence.
+ * opérateur ne peut PAS modifier son WhatsApp depuis son espace : le
+ * back-office s'en sert pour le joindre, le laisser le réécrire lui donnerait
+ * le moyen de se rendre injoignable en silence.
  *
- * `null` est une valeur légitime : un numéro devenu faux doit pouvoir être
- * effacé, sinon le bouton composerait indéfiniment une ligne coupée.
+ * Deux tables en une transaction : le nom commercial et les coordonnées vivent
+ * sur `Operator`, l'identité réelle et l'adresse de connexion sur `User`. Les
+ * écrire séparément laisserait, en cas d'incident, un opérateur renommé dont le
+ * compte porte encore l'ancienne adresse.
+ *
+ * `role` n'est JAMAIS touché ici : éditer une fiche n'est pas changer des
+ * droits.
  */
-export async function setOperatorWhatsapp(input: {
+export async function updateOperator(input: {
   operatorId: string
-  whatsapp: string | null
-}): Promise<{ whatsapp: string | null }> {
-  const updated = await db.operator.update({
-    where: { id: input.operatorId },
-    data: { whatsapp: input.whatsapp },
-    select: { whatsapp: true },
-  })
+  email: string
+  name: string
+  displayName: string
+  whatsapp?: string | null
+  avatarUrl?: string | null
+}): Promise<{ operatorId: string }> {
+  // Normalisée ICI et pas seulement par Zod : les services sont écrits une fois
+  // et consommés aussi bien par les routers tRPC que directement (RSC, tests).
+  // S'en remettre à la validation d'entrée laisserait une `Contact@Exemple.MU`
+  // entrer par un chemin et pas par l'autre — deux comptes pour une adresse.
+  const email = input.email.trim().toLowerCase()
 
-  return updated
+  return db.$transaction(async (tx) => {
+    const operator = await tx.operator.findUnique({
+      where: { id: input.operatorId },
+      select: { id: true, userId: true },
+    })
+
+    if (!operator) {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Opérateur introuvable.' })
+    }
+
+    // Collision d'adresse rattrapée AVANT l'écriture, pour dire laquelle pose
+    // problème. L'unicité en base la refuserait aussi, mais avec un message
+    // Prisma que personne ne peut agir.
+    const clash = await tx.user.findUnique({
+      where: { email },
+      select: { id: true },
+    })
+
+    if (clash && clash.id !== operator.userId) {
+      throw new TRPCError({
+        code: 'CONFLICT',
+        message: `L'adresse ${email} appartient déjà à un autre compte.`,
+      })
+    }
+
+    await tx.operator.update({
+      where: { id: operator.id },
+      data: {
+        displayName: input.displayName.trim(),
+        whatsapp: input.whatsapp ?? null,
+        avatarUrl: input.avatarUrl ?? null,
+      },
+    })
+
+    await tx.user.update({
+      where: { id: operator.userId },
+      data: { name: input.name.trim(), email },
+    })
+
+    return { operatorId: operator.id }
+  })
+}
+
+/**
+ * Supprime un opérateur — UNIQUEMENT s'il n'a jamais rien vendu.
+ *
+ * C'est le cas de l'opérateur créé par erreur, qu'il serait absurde de garder à
+ * vie dans la liste. Dès qu'une réservation existe, la suppression est refusée
+ * et l'écran bascule sur `setOperatorActive` : `slots → bookings` est en
+ * RESTRICT, et passer outre effacerait l'historique de touristes qui n'ont rien
+ * demandé.
+ *
+ * Le comptage est refait ICI, dans la transaction, et pas seulement affiché par
+ * `listOperators` : entre le chargement de la liste et le clic, une réservation
+ * a pu tomber. C'est ce recomptage qui autorise, pas le booléen du front.
+ *
+ * Le compte `User`, lui, SURVIT — rétrogradé en `tourist`. Il peut porter des
+ * réservations en tant que touriste (`bookings → user` est en RESTRICT), et
+ * supprimer un compte pour retirer un rôle serait hors de proportion.
+ */
+export async function deleteOperator(input: {
+  operatorId: string
+}): Promise<{ userId: string; deletedActivities: number }> {
+  return db.$transaction(async (tx) => {
+    const operator = await tx.operator.findUnique({
+      where: { id: input.operatorId },
+      select: { id: true, userId: true, user: { select: { role: true } } },
+    })
+
+    if (!operator) {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Opérateur introuvable.' })
+    }
+
+    const bookings = await tx.booking.count({
+      where: { slot: { activity: { operatorId: operator.id } } },
+    })
+
+    if (bookings > 0) {
+      throw new TRPCError({
+        code: 'CONFLICT',
+        message: `Cet opérateur porte ${bookings} réservation${bookings > 1 ? 's' : ''} : il ne peut pas être supprimé. Désactivez-le pour archiver ses activités en conservant l'historique.`,
+      })
+    }
+
+    // CASCADE emporte les créneaux avec les activités ; aucune réservation ne
+    // les retient, on vient de le vérifier sous transaction.
+    const deleted = await tx.activity.deleteMany({
+      where: { operatorId: operator.id },
+    })
+
+    await tx.operator.delete({ where: { id: operator.id } })
+
+    if (!PRIVILEGED_ROLES.includes(operator.user.role)) {
+      await tx.user.update({
+        where: { id: operator.userId },
+        data: { role: 'tourist' },
+      })
+    }
+
+    return { userId: operator.userId, deletedActivities: deleted.count }
+  })
+}
+
+/**
+ * Désactive ou réactive un opérateur.
+ *
+ * C'est la sortie de scène de tout prestataire qui a déjà vendu : ses activités
+ * passent en `archived` — donc hors du catalogue public et hors des recherches
+ * — son compte retombe en `tourist`, et les réservations déjà prises restent
+ * intactes et consultables par leurs titulaires comme par le back-office.
+ *
+ * La réactivation rend le rôle et rouvre la fiche, mais NE DÉSARCHIVE PAS les
+ * activités. Republier en masse ressusciterait des départs passés et des prix
+ * périmés : c'est à l'admin de rouvrir chaque fiche en connaissance de cause,
+ * depuis /admin/activities.
+ */
+export async function setOperatorActive(input: {
+  operatorId: string
+  active: boolean
+}): Promise<{ operatorId: string; active: boolean; archivedActivities: number }> {
+  return db.$transaction(async (tx) => {
+    const operator = await tx.operator.findUnique({
+      where: { id: input.operatorId },
+      select: { id: true, userId: true, user: { select: { role: true } } },
+    })
+
+    if (!operator) {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Opérateur introuvable.' })
+    }
+
+    await tx.operator.update({
+      where: { id: operator.id },
+      data: { active: input.active },
+    })
+
+    let archivedActivities = 0
+
+    if (!input.active) {
+      // `archived` est déjà l'état terminal du catalogue : les activités
+      // archivées sortent du public sans que rien ne soit détruit, et le jeu de
+      // transitions existant sait les rouvrir une par une.
+      const archived = await tx.activity.updateMany({
+        where: { operatorId: operator.id, status: { not: 'archived' } },
+        data: { status: 'archived' },
+      })
+      archivedActivities = archived.count
+    }
+
+    // Un admin ou un super admin à qui on aurait créé un profil opérateur ne
+    // doit pas perdre ses droits par ce chemin — ni les retrouver par l'autre.
+    if (!PRIVILEGED_ROLES.includes(operator.user.role)) {
+      await tx.user.update({
+        where: { id: operator.userId },
+        data: { role: input.active ? 'operator' : 'tourist' },
+      })
+    }
+
+    return { operatorId: operator.id, active: input.active, archivedActivities }
+  })
 }
 
 /**
@@ -312,13 +539,19 @@ export async function createOperator(input: {
   return db.$transaction(async (tx) => {
     const existing = await tx.user.findUnique({
       where: { email },
-      include: { operator: { select: { id: true } } },
+      include: { operator: { select: { id: true, active: true } } },
     })
 
     if (existing?.operator) {
       throw new TRPCError({
         code: 'CONFLICT',
-        message: 'Ce compte est déjà opérateur.',
+        // Un opérateur désactivé reste un opérateur : sans cette précision,
+        // l'admin qui ne le retrouve pas dans le sélecteur de fiches en
+        // recréerait un second sur la même adresse — ce que l'unicité refuse,
+        // avec un message qui n'explique rien.
+        message: existing.operator.active
+          ? 'Ce compte est déjà opérateur.'
+          : 'Ce compte est un opérateur désactivé : réactivez-le plutôt que d’en créer un second.',
       })
     }
 
@@ -337,12 +570,14 @@ export async function createOperator(input: {
       }))
 
     // On ne RÉTROGRADE jamais. `admin` et `superadmin` conservent leur rôle :
-    // les lister ici est le seul rempart, la promotion se fait sinon en
+    // `PRIVILEGED_ROLES` est le seul rempart, la promotion se fait sinon en
     // silence. Un super admin à qui on crée un profil opérateur se retrouverait
     // sans son accès aux interrupteurs, sans qu'aucun écran ne le signale.
-    const PRIVILEGED = ['admin', 'superadmin']
-
-    if (existing && !PRIVILEGED.includes(existing.role) && existing.role !== 'operator') {
+    if (
+      existing &&
+      !PRIVILEGED_ROLES.includes(existing.role) &&
+      existing.role !== 'operator'
+    ) {
       await tx.user.update({ where: { id: user.id }, data: { role: 'operator' } })
     }
 

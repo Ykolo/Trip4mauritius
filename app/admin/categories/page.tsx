@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { ImageDropzone } from '@/components/forms/ImageDropzone'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowDown,
@@ -63,19 +64,18 @@ function CategoryFields({
       </div>
       <div className="sm:col-span-2">
         <label className="block text-xs font-medium text-muted mb-1">
-          Image (URL)
+          Image
         </label>
-        <input
-          value={imageUrl}
-          onChange={(e) => onChange('imageUrl', e.target.value)}
-          maxLength={500}
-          placeholder="/images/regions/north.jpg"
-          className="w-full px-3 py-2 rounded-xl border border-surface bg-base focus:outline-none focus:ring-2 focus:ring-primary/30"
+        {/* Une seule image : `max={1}` referme la zone dès qu'elle est
+            remplie, plutôt que d'inviter à en déposer d'autres qui seraient
+            ignorées. `''` vaut « pas d'image » — c'est ce que le service
+            attend, et ce que le retrait de la vignette doit produire. */}
+        <ImageDropzone
+          value={imageUrl ? [imageUrl] : []}
+          onChange={(next) => onChange('imageUrl', next[0] ?? '')}
+          max={1}
+          hint="Illustration des vignettes de l’accueil. Sans image, un visuel par défaut est utilisé."
         />
-        <p className="text-xs text-muted mt-1">
-          Illustration des vignettes de l&apos;accueil. Vide, un visuel par
-          défaut est utilisé.
-        </p>
       </div>
     </div>
   )

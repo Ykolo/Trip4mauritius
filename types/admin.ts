@@ -25,7 +25,23 @@ export interface AdminOperator {
   userEmail: string
   /** Numéro professionnel du prestataire — le bouton WhatsApp du back-office. */
   whatsapp: string | null
+  avatarUrl: string | null
   activityCount: number
+  /**
+   * Réservations portées par les activités de cet opérateur, tous statuts
+   * confondus — annulations comprises. C'est ce qui décide si la fiche est
+   * supprimable, et une annulation reste une trace comptable qu'on ne jette pas.
+   */
+  bookingCount: number
+  /**
+   * Dérivé côté serveur, jamais recalculé dans l'écran — même doctrine que
+   * `Booking.cancellable` et `OperatorSlot.deletable`. Le front qui
+   * reconstituerait la règle finirait par proposer un bouton que la procédure
+   * rejette.
+   */
+  deletable: boolean
+  /** `false` : activités archivées et compte rétrogradé. Voir `Operator.active`. */
+  active: boolean
   createdAt: string
 }
 
@@ -64,9 +80,16 @@ export interface AdminBookingRow {
   status: BookingStatus
   createdAt: string
 
-  /** Départ, épinglé sur Indian/Mauritius. */
+  /** Créneau ou location à la journée — décide de ce que la ligne affiche. */
+  mode: 'slot' | 'daily'
+  /** Début, épinglé sur Indian/Mauritius. Renseigné dans les deux modes. */
   date: string
   time: string
+  /** Fin de la location — `null` en mode créneau. */
+  endDate: string | null
+  endTime: string | null
+  /** Jours facturés en mode journée, `null` en mode créneau. */
+  billedDays: number | null
   /** Le départ a-t-il déjà eu lieu ? Dérivé ici, jamais recalculé côté écran. */
   departed: boolean
 

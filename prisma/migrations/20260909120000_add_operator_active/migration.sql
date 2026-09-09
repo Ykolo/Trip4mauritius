@@ -1,0 +1,22 @@
+-- Désactivation d'un opérateur, par opposition à sa suppression.
+--
+-- `activities → slots` est en CASCADE et `slots → bookings` en RESTRICT :
+-- supprimer un opérateur déjà réservé casserait sur une clé étrangère, et
+-- effacerait l'historique de touristes qui n'ont rien demandé. On le désactive
+-- donc — activités archivées, compte rétrogradé en `tourist`, réservations
+-- intactes — et on ne réserve la suppression franche qu'aux opérateurs vierges.
+--
+-- Écrit à la main plutôt que par `prisma migrate dev` : le checksum de
+-- `20260902120000_add_categories` diverge de ce qui a été appliqué, et
+-- `migrate dev` propose alors de RESETTER la base — celle-là même que sert le
+-- site depuis le 07/09/2026. Cette migration s'applique par `migrate deploy`,
+-- qui ne reset jamais.
+--
+-- Pas de contrainte CHECK : `NOT NULL DEFAULT true` dit déjà tout ce qu'il y a
+-- à dire sur un booléen. Les 9 CHECK du lot 1 protègent des invariants
+-- arithmétiques (capacité, cohérence des montants) qu'un type ne peut pas
+-- exprimer ; ce n'est pas le cas ici.
+--
+-- Additif et rétrocompatible : les opérateurs existants deviennent tous actifs,
+-- ce qu'ils sont déjà de fait.
+ALTER TABLE "operators" ADD COLUMN "active" BOOLEAN NOT NULL DEFAULT true;

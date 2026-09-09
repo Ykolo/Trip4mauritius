@@ -7,6 +7,7 @@ import {
 } from '@/lib/datetime'
 import type { ActivityInput, SlotInput } from '@/lib/schemas/operator'
 import {
+  assertPublishable,
   toActivityWriteData,
   uniqueSlug,
 } from '@/server/services/activity-write'
@@ -103,33 +104,25 @@ export async function listOperatorActivities(
 
   // Le nombre de réservations par activité en UNE requête groupée, plutôt
   // qu'un `_count` imbriqué par créneau qu'il faudrait ensuite additionner.
+  // Groupé sur `bookings.activityId`, que le lot B a rendu obligatoire. Le
+  // détour par le créneau qu'il fallait faire auparavant aurait laissé les
+  // locations à la journée hors du compte : l'opérateur aurait vu « 0
+  // réservation » sur une voiture pourtant louée.
   const counts = await db.booking.groupBy({
-    by: ['slotId'],
+    by: ['activityId'],
     where: {
       // « Créée » compte : la place est retenue dès la réservation, bien avant
       // que l'opérateur valide. L'exclure ferait afficher au prestataire moins
       // de réservations que son créneau n'en a réellement.
       status: { in: ['pending_validation', 'confirmed', 'completed'] },
-      slot: { activityId: { in: activities.map((a) => a.id) } },
+      activityId: { in: activities.map((a) => a.id) },
     },
     _count: { _all: true },
   })
 
-  const slots = await db.activitySlot.findMany({
-    where: { id: { in: counts.map((c) => c.slotId) } },
-    select: { id: true, activityId: true },
-  })
-  const activityBySlot = new Map(slots.map((s) => [s.id, s.activityId]))
-
-  const bookingsByActivity = new Map<string, number>()
-  for (const row of counts) {
-    const activityId = activityBySlot.get(row.slotId)
-    if (!activityId) continue
-    bookingsByActivity.set(
-      activityId,
-      (bookingsByActivity.get(activityId) ?? 0) + row._count._all,
-    )
-  }
+  const bookingsByActivity = new Map(
+    counts.map((row) => [row.activityId, row._count._all]),
+  )
 
   return activities.map((activity) =>
     toOperatorActivitySummary({
@@ -167,12 +160,14 @@ export async function listOperatorBookings(
   operatorId: string,
   page: number,
 ): Promise<OperatorBookingsPage> {
-  const where = { slot: { activity: { operatorId } } }
+  // Filtré sur `activity` directement, plus par le créneau : sans quoi un
+  // loueur ne verrait aucune de ses locations à la journée.
+  const where = { activity: { operatorId } }
 
   const [rows, total] = await Promise.all([
     db.booking.findMany({
       where,
-      include: { user: true, slot: { include: { activity: true } } },
+      include: { user: true, activity: true },
       orderBy: { createdAt: 'desc' },
       skip: (page - 1) * BOOKINGS_PER_PAGE,
       take: BOOKINGS_PER_PAGE,
@@ -292,16 +287,10 @@ export async function publishOwnActivity(
     })
   }
 
-  const slots = await db.activitySlot.count({
-    where: { activityId, startsAt: { gte: new Date() } },
-  })
-
-  if (slots === 0) {
-    throw new TRPCError({
-      code: 'BAD_REQUEST',
-      message: 'Ajoutez au moins un créneau à venir avant de mettre en ligne.',
-    })
-  }
+  // La règle dépend du mode de vente et vit dans `activity-write.ts` : une
+  // location à la journée n'a aucun créneau, lui imposer d'en avoir un la
+  // rendait impubliable pour toujours.
+  await assertPublishable(activityId)
 
   await db.activity.update({
     where: { id: activityId },

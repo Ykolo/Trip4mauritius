@@ -12,6 +12,7 @@ import {
   toOperatorActivitySummary,
 } from '@/server/mappers/operator'
 import {
+  assertPublishable,
   toActivityWriteData,
   uniqueSlug,
 } from '@/server/services/activity-write'
@@ -170,9 +171,15 @@ export async function getActivityForAdmin(
  * Non vérifiés inclus, avec le drapeau : au lancement, l'admin saisit le
  * catalogue pour des enseignes qui n'ont pas encore de compte validé. Les
  * masquer aurait rendu la création impossible tant que personne n'est approuvé.
+ *
+ * Les DÉSACTIVÉS, eux, sont exclus — c'est la différence entre « pas encore
+ * approuvé » et « ne travaille plus avec nous ». Les laisser proposer ici
+ * permettrait de créer une fiche neuve chez un prestataire dont on vient
+ * d'archiver tout le catalogue.
  */
 export async function listOperatorOptions(): Promise<AdminOperatorOption[]> {
   const operators = await db.operator.findMany({
+    where: { active: true },
     include: { _count: { select: { activities: true } } },
     orderBy: { displayName: 'asc' },
   })
@@ -255,20 +262,10 @@ export async function setActivityStatusForAdmin(
 ): Promise<AdminActivityDetail> {
   await existingActivity(activityId)
 
+  // Même règle que `publishOwnActivity`, et déclarée au même endroit : elle
+  // dépend du mode de vente, et une location à la journée n'a aucun créneau.
   if (status === 'published') {
-    // Même règle que `publishActivity` : une fiche sans départ à venir
-    // produirait une page indexée que personne ne peut réserver.
-    const upcoming = await db.activitySlot.count({
-      where: { activityId, startsAt: { gte: new Date() } },
-    })
-
-    if (upcoming === 0) {
-      throw new TRPCError({
-        code: 'BAD_REQUEST',
-        message:
-          'Ajoutez au moins un créneau à venir avant de mettre en ligne.',
-      })
-    }
+    await assertPublishable(activityId)
   }
 
   // Transition CONDITIONNÉE sur l'état lu, comme la file de modération : deux

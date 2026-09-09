@@ -71,6 +71,10 @@ async function publish(opts: {
       title: opts.title,
       region: opts.region ?? 'North',
       duration: opts.duration ?? '< 2h',
+      // Le mode `slot` (défaut de la colonne) exige une durée réelle :
+      // `activities_slot_requires_duration`. Ces tests portent sur la
+      // recherche, la valeur n'a donc pas à être fidèle au libellé.
+      durationMinutes: 90,
       priceHt: 50,
       maxParticipants: 10,
       status: 'published',

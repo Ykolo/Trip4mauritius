@@ -102,6 +102,25 @@ export const operatorProcedure = protectedProcedure.use(async ({ ctx, next }) =>
     })
   }
 
+  // La désactivation ferme l'espace opérateur ICI, et pas seulement par la
+  // rétrogradation du rôle que pose `setOperatorActive`.
+  //
+  // Le rôle vient de la SESSION (cf. `sessionUser` plus haut) : la
+  // rétrogradation ne prend effet qu'au rafraîchissement de son cache, soit
+  // jusqu'à 5 minutes pendant lesquelles un opérateur qu'on vient d'écarter
+  // continuerait d'écrire. Cette lecture-ci touche la base à chaque requête, et
+  // referme la fenêtre.
+  //
+  // Elle couvre aussi le cas que la rétrogradation ne peut PAS traiter : un
+  // compte `admin` ou `superadmin` doté d'un profil opérateur ne se rétrograde
+  // jamais (`PRIVILEGED_ROLES`), et resterait sinon opérateur actif à vie.
+  if (!operator.active) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'Ce compte opérateur a été désactivé par Trip4mauritius.',
+    })
+  }
+
   return next({ ctx: { ...ctx, operator } })
 })
 

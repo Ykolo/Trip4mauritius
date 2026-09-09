@@ -239,31 +239,29 @@ export default function AccountPage() {
         {/* Profile Header */}
         <ProfileHeader user={user} />
 
-        {/* Accès aux espaces réservés.
-            Sans ce raccourci, /admin et /operator ne sont atteignables qu'en
-            tapant l'URL — les pages existent mais rien n'y mène. */}
-        {(user.role === 'operator' ||
-          user.role === 'admin' ||
-          user.role === 'superadmin') && (
+        {/* Accès à l'espace opérateur — et à LUI SEUL.
+            Sans ce raccourci, /operator n'est atteignable qu'en tapant l'URL :
+            la page existe mais rien n'y mène, et un partenaire n'a pas à
+            connaître l'arborescence du site.
+
+            Le back-office, lui, n'a plus de raccourci nulle part (le même a été
+            retiré de la barre du haut) : décision du client, l'admin tape
+            `/admin`. Ils ne sont que deux, ils connaissent l'adresse, et rien
+            dans l'interface publique ne doit laisser deviner qu'une
+            administration existe. */}
+        {/* `admin` reste inclus : le rôle n'est pas exclusif, un administrateur
+            peut porter un profil opérateur (c'est même le seul cas que la
+            rétrogradation ne sait pas traiter, cf. CLAUDE.md). Le superadmin,
+            lui, n'en a jamais — le lien le mènerait à « réservé aux
+            partenaires ». */}
+        {(user.role === 'operator' || user.role === 'admin') && (
           <div className="mt-6 flex flex-wrap gap-3">
-            {/* Le super admin n'a pas de profil opérateur : lui proposer cet
-                espace le mènerait à un écran « réservé aux partenaires ». */}
-            {user.role !== 'superadmin' && (
-              <Link
-                href="/operator/dashboard"
-                className="flex-1 min-w-[160px] text-center bg-white shadow-card rounded-2xl py-3 font-semibold text-ink hover:text-primary transition-colors"
-              >
-                Espace opérateur
-              </Link>
-            )}
-            {(user.role === 'admin' || user.role === 'superadmin') && (
-              <Link
-                href="/admin"
-                className="flex-1 min-w-[160px] text-center bg-white shadow-card rounded-2xl py-3 font-semibold text-ink hover:text-primary transition-colors"
-              >
-                Administration
-              </Link>
-            )}
+            <Link
+              href="/operator/dashboard"
+              className="flex-1 min-w-[160px] text-center bg-white shadow-card rounded-2xl py-3 font-semibold text-ink hover:text-primary transition-colors"
+            >
+              Espace opérateur
+            </Link>
           </div>
         )}
 

@@ -2,16 +2,37 @@
 
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Loader2, Plus, Store } from 'lucide-react'
+import {
+  Ban,
+  Check,
+  Loader2,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Store,
+  Trash2,
+  X,
+} from 'lucide-react'
 import { useTRPC } from '@/lib/trpc/client'
 import { PhoneInput } from '@/components/forms/PhoneInput'
+import { ImageDropzone } from '@/components/forms/ImageDropzone'
 import type { AdminOperator } from '@/types/admin'
 
-// Écran opérateurs — création et listing, plus de validation.
+// Écran opérateurs — création, édition, suppression ou désactivation.
 //
 // Il portait une file de demandes d'accès avec « Valider » et « Révoquer ».
 // L'auto-inscription ayant disparu au lot 1, il n'y a plus rien à valider : un
 // opérateur existe parce que Trip4mauritius l'a créé.
+//
+// Longtemps, il ne savait QUE créer : un nom mal saisi ou une adresse fautive
+// n'avaient aucun chemin de correction, et une adresse fautive rend le compte
+// définitivement inconnectable — son titulaire ne peut même pas demander une
+// réinitialisation. D'où l'édition complète ci-dessous.
+//
+// Suppression et désactivation ne sont pas deux goûts : `slots → bookings` est
+// en RESTRICT. Un opérateur qui a vendu ne se supprime pas sans effacer
+// l'historique de touristes qui n'ont rien demandé. C'est le serveur qui
+// tranche (`deletable`), l'écran ne fait qu'afficher la branche retenue.
 
 function CreateOperatorForm({ onDone }: { onDone: () => void }) {
   const trpc = useTRPC()
@@ -124,76 +145,358 @@ function CreateOperatorForm({ onDone }: { onDone: () => void }) {
 }
 
 /**
- * Numéro WhatsApp d'un opérateur déjà créé.
+ * Formulaire d'édition d'un opérateur.
  *
- * En ligne, dans le listing, plutôt que derrière un écran d'édition : les
- * opérateurs existants n'ont AUCUN numéro (la colonne vient d'être ajoutée), et
- * l'admin doit pouvoir tous les renseigner d'affilée sans naviguer.
+ * Il remplace l'ancien champ WhatsApp en ligne : celui-ci était le SEUL champ
+ * modifiable, et le garder à part aurait laissé deux chemins d'écriture sur la
+ * même colonne — le second finissant par oublier une validation que le premier
+ * applique.
+ *
+ * `key={operator.operatorId}` côté appelant : l'état local est initialisé
+ * depuis les props, et sans remontage il survivrait à un changement de ligne.
  */
-function WhatsappField({
+function EditOperatorForm({
   operator,
-  onSaved,
+  onDone,
+  onCancel,
 }: {
   operator: AdminOperator
-  onSaved: () => void
+  onDone: () => void
+  onCancel: () => void
 }) {
   const trpc = useTRPC()
-  const [value, setValue] = useState(operator.whatsapp ?? '')
+  const [displayName, setDisplayName] = useState(operator.displayName)
+  const [name, setName] = useState(operator.userName)
+  const [email, setEmail] = useState(operator.userEmail)
+  const [whatsapp, setWhatsapp] = useState(operator.whatsapp ?? '')
+  const [avatarUrl, setAvatarUrl] = useState(operator.avatarUrl ?? '')
   const [error, setError] = useState<string | null>(null)
-  const [saved, setSaved] = useState(false)
 
   const save = useMutation(
-    trpc.admin.setOperatorWhatsapp.mutationOptions({
+    trpc.admin.updateOperator.mutationOptions({
       onSuccess: () => {
         setError(null)
-        setSaved(true)
-        onSaved()
+        onDone()
       },
-      onError: (e) => {
-        setSaved(false)
-        setError(e.message)
-      },
+      onError: (e) => setError(e.message),
     }),
   )
 
-  // Rien d'enregistré tant que la valeur n'a pas bougé : sans ça, un simple
-  // passage au clavier dans la liste déclencherait autant d'écritures que de
-  // champs traversés.
-  const dirty = value.trim() !== (operator.whatsapp ?? '')
+  const emailChanged = email.trim().toLowerCase() !== operator.userEmail
 
   return (
-    <div className="mt-3">
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        setError(null)
+        save.mutate({
+          operatorId: operator.operatorId,
+          displayName,
+          name,
+          email,
+          whatsapp,
+          avatarUrl,
+        })
+      }}
+      className="mt-4 pt-4 border-t border-muted/10 space-y-4"
+    >
+      <div className="grid gap-4 md:grid-cols-3">
+        <label className="block">
+          <span className="text-sm text-muted">Nom commercial</span>
+          <input
+            required
+            maxLength={120}
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            className="mt-1 w-full h-11 px-3 rounded-xl border border-muted/30 focus:outline-none focus:ring-2 focus:ring-primary/40"
+          />
+        </label>
+
+        <label className="block">
+          <span className="text-sm text-muted">Contact</span>
+          <input
+            required
+            maxLength={120}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="mt-1 w-full h-11 px-3 rounded-xl border border-muted/30 focus:outline-none focus:ring-2 focus:ring-primary/40"
+          />
+        </label>
+
+        <label className="block">
+          <span className="text-sm text-muted">Email</span>
+          <input
+            required
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="mt-1 w-full h-11 px-3 rounded-xl border border-muted/30 focus:outline-none focus:ring-2 focus:ring-primary/40"
+          />
+        </label>
+      </div>
+
+      {/* L'email est l'identifiant de connexion, et le projet ne vérifie aucune
+          adresse : le dire ici, au moment où l'admin la change, plutôt que de
+          laisser découvrir plus tard qu'un opérateur ne peut plus se connecter. */}
+      {emailChanged && (
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          C&apos;est l&apos;adresse de connexion de cet opérateur. Après
+          enregistrement, il devra se connecter avec la nouvelle — son mot de
+          passe, lui, ne change pas.
+        </p>
+      )}
+
       <PhoneInput
         label="WhatsApp"
-        value={value}
-        onChange={(next) => {
-          setValue(next)
-          setSaved(false)
-        }}
-        error={error}
+        value={whatsapp}
+        onChange={setWhatsapp}
+        hint="Laisser vide retire le numéro : le bouton WhatsApp des réservations se grise."
       />
 
-      {/* Le bouton sur sa propre ligne, pas à côté du champ : `PhoneInput`
-          gagne une ligne de rappel dès qu'un numéro est saisi, et un bouton
-          aligné dessus sauterait à chaque frappe. */}
-      <div className="mt-2 flex justify-end">
+      <div>
+        <span className="text-sm text-muted">Logo</span>
+        <div className="mt-1">
+          {/* `''` vaut « pas de logo » : c'est ce que `updateOperator`
+              transforme en `null`, et ce que le retrait doit produire. */}
+          <ImageDropzone
+            value={avatarUrl ? [avatarUrl] : []}
+            onChange={(next) => setAvatarUrl(next[0] ?? '')}
+            max={1}
+            hint="Affiché sur la fiche publique des activités de cet opérateur."
+          />
+        </div>
+      </div>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      <div className="flex items-center gap-2">
         <button
-          type="button"
-          disabled={!dirty || save.isPending}
-          onClick={() =>
-            save.mutate({ operatorId: operator.operatorId, whatsapp: value })
-          }
-          className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-muted/30 text-sm font-medium disabled:opacity-40"
+          type="submit"
+          disabled={save.isPending}
+          className="inline-flex items-center gap-2 bg-primary text-white font-semibold px-4 py-2 rounded-xl text-sm disabled:opacity-60"
         >
           {save.isPending ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : saved && !dirty ? (
-            <Check className="w-3.5 h-3.5 text-green-600" />
-          ) : null}
-          {saved && !dirty ? 'Enregistré' : 'Enregistrer'}
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Check className="w-4 h-4" />
+          )}
+          Enregistrer
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-muted/30 text-sm font-medium"
+        >
+          <X className="w-4 h-4" />
+          Annuler
         </button>
       </div>
+    </form>
+  )
+}
+
+/**
+ * Suppression ou désactivation, selon ce que le SERVEUR autorise.
+ *
+ * L'écran ne rejoue aucune règle : il lit `deletable`, dérivé du nombre de
+ * réservations par `listOperators`. La procédure recompte de son côté, sous
+ * transaction — un bouton affiché n'a jamais autorisé quoi que ce soit.
+ *
+ * La suppression demande une confirmation en deux temps. Elle emporte les
+ * activités et les créneaux, et rien ne la rejoue en arrière.
+ */
+function DangerZone({
+  operator,
+  onDone,
+}: {
+  operator: AdminOperator
+  onDone: () => void
+}) {
+  const trpc = useTRPC()
+  const [confirming, setConfirming] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handlers = {
+    onSuccess: () => {
+      setError(null)
+      setConfirming(false)
+      onDone()
+    },
+    onError: (e: { message: string }) => setError(e.message),
+  }
+
+  const remove = useMutation(trpc.admin.deleteOperator.mutationOptions(handlers))
+  const toggle = useMutation(
+    trpc.admin.setOperatorActive.mutationOptions(handlers),
+  )
+
+  const pending = remove.isPending || toggle.isPending
+
+  return (
+    <div className="mt-4 pt-4 border-t border-muted/10">
+      {!operator.active ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-xs text-muted flex-1 min-w-[14rem]">
+            Opérateur désactivé. Le réactiver lui rend son accès, mais ses
+            activités restent archivées — à remettre en ligne une par une depuis
+            le catalogue.
+          </p>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() =>
+              toggle.mutate({ operatorId: operator.operatorId, active: true })
+            }
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold disabled:opacity-60"
+          >
+            {toggle.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <RotateCcw className="w-4 h-4" />
+            )}
+            Réactiver
+          </button>
+        </div>
+      ) : operator.deletable ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-xs text-muted flex-1 min-w-[14rem]">
+            Aucune réservation : cet opérateur peut être supprimé
+            définitivement, avec ses {operator.activityCount} activité
+            {operator.activityCount > 1 ? 's' : ''}.
+          </p>
+          {confirming ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() =>
+                  remove.mutate({ operatorId: operator.operatorId })
+                }
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-semibold disabled:opacity-60"
+              >
+                {remove.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+                Confirmer la suppression
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirming(false)}
+                className="px-3 py-2 rounded-xl border border-muted/30 text-sm"
+              >
+                Annuler
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirming(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-red-200 text-red-700 text-sm font-semibold hover:bg-red-50"
+            >
+              <Trash2 className="w-4 h-4" />
+              Supprimer
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Le motif en clair, pas un bouton grisé sans explication : sans le
+              nombre, l'admin croit à une panne de l'écran. */}
+          <p className="text-xs text-muted flex-1 min-w-[14rem]">
+            {operator.bookingCount} réservation
+            {operator.bookingCount > 1 ? 's' : ''} : la suppression effacerait
+            l&apos;historique de clients qui n&apos;ont rien demandé. La
+            désactivation archive ses activités et conserve tout.
+          </p>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() =>
+              toggle.mutate({ operatorId: operator.operatorId, active: false })
+            }
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-red-200 text-red-700 text-sm font-semibold hover:bg-red-50 disabled:opacity-60"
+          >
+            {toggle.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Ban className="w-4 h-4" />
+            )}
+            Désactiver
+          </button>
+        </div>
+      )}
+
+      {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
     </div>
+  )
+}
+
+function OperatorRow({
+  operator,
+  onChanged,
+}: {
+  operator: AdminOperator
+  onChanged: () => void
+}) {
+  const [editing, setEditing] = useState(false)
+
+  return (
+    <li
+      className={`bg-white rounded-2xl shadow-card p-5 ${
+        operator.active ? '' : 'opacity-70'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-semibold text-ink truncate">
+              {operator.displayName}
+            </p>
+            {!operator.active && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-muted/20 text-muted">
+                Désactivé
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-muted truncate">
+            {operator.userName} · {operator.userEmail}
+          </p>
+          <p className="text-xs text-muted mt-0.5">
+            {operator.activityCount} activité
+            {operator.activityCount > 1 ? 's' : ''} ·{' '}
+            {operator.bookingCount} réservation
+            {operator.bookingCount > 1 ? 's' : ''}
+            {operator.whatsapp ? ` · ${operator.whatsapp}` : ' · pas de WhatsApp'}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setEditing((v) => !v)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-muted/30 text-sm font-medium shrink-0"
+        >
+          <Pencil className="w-3.5 h-3.5" />
+          {editing ? 'Fermer' : 'Modifier'}
+        </button>
+      </div>
+
+      {editing && (
+        <>
+          <EditOperatorForm
+            key={operator.operatorId}
+            operator={operator}
+            onDone={() => {
+              setEditing(false)
+              onChanged()
+            }}
+            onCancel={() => setEditing(false)}
+          />
+          <DangerZone operator={operator} onDone={onChanged} />
+        </>
+      )}
+    </li>
   )
 }
 
@@ -204,23 +507,30 @@ export default function AdminOperatorsPage() {
     trpc.admin.operators.queryOptions(),
   )
 
+  // Les DEUX requêtes, à chaque écriture. `operatorOptions` alimente le
+  // sélecteur d'opérateur de /admin/activities et exclut les désactivés :
+  // l'oublier laisserait proposer, à la création d'une fiche, un prestataire
+  // dont on vient d'archiver tout le catalogue.
+  const invalidate = () => {
+    queryClient.invalidateQueries({
+      queryKey: trpc.admin.operators.queryKey(),
+    })
+    queryClient.invalidateQueries({
+      queryKey: trpc.admin.operatorOptions.queryKey(),
+    })
+  }
+
   return (
     <div className="p-6 md:p-10 max-w-5xl mx-auto">
       <header className="mb-6">
         <h1 className="font-body font-bold text-3xl text-ink">Opérateurs</h1>
         <p className="text-muted mt-1">
           Les prestataires référencés sur la plateforme. Vous seul pouvez en
-          créer.
+          créer, les modifier et les retirer.
         </p>
       </header>
 
-      <CreateOperatorForm
-        onDone={() =>
-          queryClient.invalidateQueries({
-            queryKey: trpc.admin.operators.queryKey(),
-          })
-        }
-      />
+      <CreateOperatorForm onDone={invalidate} />
 
       {isLoading || !operators ? (
         <div className="space-y-3">
@@ -241,34 +551,11 @@ export default function AdminOperatorsPage() {
       ) : (
         <ul className="space-y-3">
           {operators.map((operator) => (
-            <li
+            <OperatorRow
               key={operator.operatorId}
-              className="bg-white rounded-2xl shadow-card p-5"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <p className="font-semibold text-ink truncate">
-                    {operator.displayName}
-                  </p>
-                  <p className="text-sm text-muted truncate">
-                    {operator.userName} · {operator.userEmail}
-                  </p>
-                </div>
-                <span className="text-sm text-muted whitespace-nowrap">
-                  {operator.activityCount} activité
-                  {operator.activityCount > 1 ? 's' : ''}
-                </span>
-              </div>
-
-              <WhatsappField
-                operator={operator}
-                onSaved={() =>
-                  queryClient.invalidateQueries({
-                    queryKey: trpc.admin.operators.queryKey(),
-                  })
-                }
-              />
-            </li>
+              operator={operator}
+              onChanged={invalidate}
+            />
           ))}
         </ul>
       )}

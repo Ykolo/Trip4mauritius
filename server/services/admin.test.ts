@@ -1,7 +1,16 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '@/lib/db'
-import { createOperator } from '@/server/services/admin'
+import {
+  createOperator,
+  deleteOperator,
+  listOperators,
+  setOperatorActive,
+  updateOperator,
+} from '@/server/services/admin'
+import { listOperatorOptions } from '@/server/services/admin-catalog'
 import { listActivities } from '@/server/services/activity'
+import { createCaller } from '@/server/trpc/root'
+import { FEATURE_DEFAULTS } from '@/lib/features'
 import {
   createActivity,
   createSlots,
@@ -16,6 +25,13 @@ import { testCategoryId } from '@/server/services/test-support'
 // plus. Ce qui reste à prouver est plus étroit mais tout aussi sensible :
 // `createOperator` est désormais le SEUL chemin vers le rôle `operator`, et il
 // ne doit jamais devenir une fabrique d'administrateurs.
+//
+// S'y ajoute le retrait d'un opérateur, qui a DEUX formes qu'il ne faut pas
+// confondre : la suppression franche, réservée à celui qui n'a jamais rien
+// vendu, et la désactivation, seule possible dès qu'une réservation existe.
+// C'est `slots → bookings` (RESTRICT) qui impose la distinction — et une
+// suppression qui passerait outre effacerait l'historique de touristes qui
+// n'ont rien demandé.
 
 const TEST_PREFIX = 'vitest-admin-'
 
@@ -50,6 +66,8 @@ async function activityInput(
     categoryId: await testCategoryId(),
     region: 'South',
     duration: 'Demi-journée',
+    bookingMode: 'slot' as const,
+    durationMinutes: 240,
     description: { fr: 'Description de test.' },
     priceHT: 60,
     maxParticipants: 8,
@@ -63,6 +81,61 @@ async function activityInput(
 
 function tomorrow(): string {
   return new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+}
+
+/** Opérateur + une activité en brouillon, le décor minimal de ces tests. */
+async function operatorWithActivity(label = 'op') {
+  const email = testEmail(label)
+  const { operatorId } = await createOperator({
+    email,
+    name: 'Contact',
+    displayName: 'Société de test',
+  })
+  const activity = await createActivity(operatorId, await activityInput())
+  return { operatorId, email, activityId: activity.id }
+}
+
+/**
+ * Pose une réservation sur une activité, en écrivant directement en base.
+ *
+ * On court-circuite `createBookings` volontairement : ce qui est testé ici
+ * n'est pas le tunnel de réservation (il a son propre fichier) mais le fait
+ * qu'une LIGNE dans `bookings` suffit à interdire la suppression. Les montants
+ * respectent le CHECK `depositDue + balanceDueOnSite = totalPrice`.
+ */
+async function bookingOn(activityId: string) {
+  const slot = await db.activitySlot.create({
+    data: {
+      activityId,
+      startsAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
+      maxSpots: 4,
+    },
+  })
+
+  const tourist = await db.user.create({
+    data: { email: testEmail('client'), name: 'Client', role: 'tourist' },
+  })
+
+  return db.booking.create({
+    data: {
+      bookingRef: `${TEST_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      userId: tourist.id,
+      activityId,
+      slotId: slot.id,
+      // Recopié du créneau, comme le fait `createBookings` : c'est
+      // `bookings_mode_shape` qui refuserait une ligne sans période.
+      startsAt: slot.startsAt,
+      participants: 2,
+      totalPrice: 100,
+      depositDue: 20,
+      balanceDueOnSite: 80,
+    },
+  })
+}
+
+async function roleOf(email: string) {
+  const user = await db.user.findUnique({ where: { email } })
+  return user?.role
 }
 
 beforeEach(cleanup)
@@ -168,16 +241,7 @@ describe('création d\'un opérateur', () => {
 })
 
 describe('mise en ligne sans modération', () => {
-  async function operatorWithDraft() {
-    const { operatorId } = await createOperator({
-      email: testEmail('op'),
-      name: 'Contact',
-      displayName: 'Société de test',
-    })
-
-    const activity = await createActivity(operatorId, await activityInput())
-    return { operatorId, activityId: activity.id }
-  }
+  const operatorWithDraft = operatorWithActivity
 
   it('publie directement, sans passer par une file d\'attente', async () => {
     const { operatorId, activityId } = await operatorWithDraft()
@@ -218,5 +282,316 @@ describe('mise en ligne sans modération', () => {
     await expect(
       publishOwnActivity(operatorId, activityId),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+  })
+})
+
+describe('édition d\'un opérateur', () => {
+  it('écrit les DEUX tables et ne touche pas au rôle', async () => {
+    // Nom commercial et coordonnées vivent sur `Operator`, identité réelle et
+    // adresse de connexion sur `User`. Une écriture partielle laisserait un
+    // opérateur renommé dont le compte porte encore l'ancienne adresse.
+    const { operatorId, email } = await operatorWithActivity('edit')
+    const nouveau = testEmail('edit-nouveau')
+
+    await updateOperator({
+      operatorId,
+      displayName: 'Nouvelle Enseigne',
+      name: 'Nouveau Contact',
+      email: nouveau,
+      whatsapp: '+230 5789 1234',
+      avatarUrl: '/images/logo.png',
+    })
+
+    const operator = await db.operator.findUnique({
+      where: { id: operatorId },
+      include: { user: true },
+    })
+
+    expect(operator?.displayName).toBe('Nouvelle Enseigne')
+    expect(operator?.whatsapp).toBe('+230 5789 1234')
+    expect(operator?.avatarUrl).toBe('/images/logo.png')
+    expect(operator?.user.name).toBe('Nouveau Contact')
+    expect(operator?.user.email).toBe(nouveau)
+    // Éditer une fiche n'est pas changer des droits.
+    expect(operator?.user.role).toBe('operator')
+    expect(await roleOf(email)).toBeUndefined()
+  })
+
+  it('normalise l\'adresse, quel que soit le chemin d\'appel', async () => {
+    // Le service est consommé par les routers tRPC ET directement. S'en
+    // remettre au `.toLowerCase()` de Zod laisserait entrer une majuscule par
+    // un chemin et pas par l'autre — deux comptes pour une seule adresse.
+    const { operatorId } = await operatorWithActivity('casse')
+    const brut = testEmail('MaJuScUlE').toUpperCase()
+
+    await updateOperator({
+      operatorId,
+      displayName: 'Enseigne',
+      name: 'Contact',
+      email: `  ${brut}  `,
+    })
+
+    const operator = await db.operator.findUnique({
+      where: { id: operatorId },
+      include: { user: true },
+    })
+    expect(operator?.user.email).toBe(brut.toLowerCase())
+  })
+
+  it('refuse une adresse déjà prise par un autre compte', async () => {
+    const premier = await operatorWithActivity('premier')
+    const second = await operatorWithActivity('second')
+
+    await expect(
+      updateOperator({
+        operatorId: second.operatorId,
+        displayName: 'Enseigne',
+        name: 'Contact',
+        email: premier.email,
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' })
+
+    // Et rien n'a bougé : le refus est posé AVANT les deux écritures.
+    const inchange = await db.operator.findUnique({
+      where: { id: second.operatorId },
+      include: { user: true },
+    })
+    expect(inchange?.user.email).toBe(second.email)
+  })
+
+  it('accepte de réenregistrer un opérateur sans changer son adresse', async () => {
+    // La garde de collision doit s'exclure elle-même : sinon, corriger le seul
+    // nom commercial serait refusé parce que l'adresse « appartient déjà » au
+    // compte qu'on est en train d'éditer.
+    const { operatorId, email } = await operatorWithActivity('idem')
+
+    await updateOperator({
+      operatorId,
+      displayName: 'Enseigne Corrigée',
+      name: 'Contact',
+      email,
+    })
+
+    const operator = await db.operator.findUnique({ where: { id: operatorId } })
+    expect(operator?.displayName).toBe('Enseigne Corrigée')
+  })
+
+  it('retire le numéro WhatsApp quand le champ est vidé', async () => {
+    // Un numéro devenu faux doit pouvoir être effacé, sinon le bouton du
+    // back-office composerait indéfiniment une ligne coupée.
+    const { operatorId, email } = await operatorWithActivity('sans-num')
+    await updateOperator({
+      operatorId,
+      displayName: 'Enseigne',
+      name: 'Contact',
+      email,
+      whatsapp: '+230 5789 1234',
+    })
+
+    await updateOperator({
+      operatorId,
+      displayName: 'Enseigne',
+      name: 'Contact',
+      email,
+      whatsapp: null,
+    })
+
+    const operator = await db.operator.findUnique({ where: { id: operatorId } })
+    expect(operator?.whatsapp).toBeNull()
+  })
+})
+
+describe('suppression d\'un opérateur', () => {
+  it('supprime le profil et ses activités, mais CONSERVE le compte', async () => {
+    // Le compte peut porter des réservations en tant que touriste
+    // (`bookings → user` est en RESTRICT) : le supprimer pour retirer un rôle
+    // serait hors de proportion.
+    const { operatorId, email, activityId } = await operatorWithActivity('vierge')
+
+    const { deletedActivities } = await deleteOperator({ operatorId })
+    expect(deletedActivities).toBe(1)
+
+    expect(await db.operator.findUnique({ where: { id: operatorId } })).toBeNull()
+    expect(await db.activity.findUnique({ where: { id: activityId } })).toBeNull()
+    expect(await roleOf(email)).toBe('tourist')
+  })
+
+  it('refuse dès qu\'une réservation existe, et ne touche à RIEN', async () => {
+    const { operatorId, activityId } = await operatorWithActivity('vendu')
+    await bookingOn(activityId)
+
+    await expect(deleteOperator({ operatorId })).rejects.toMatchObject({
+      code: 'CONFLICT',
+    })
+
+    // Le refus doit être total : une suppression partielle aurait emporté les
+    // activités avant de buter sur la clé étrangère des réservations.
+    expect(
+      await db.operator.findUnique({ where: { id: operatorId } }),
+    ).not.toBeNull()
+    expect(
+      await db.activity.findUnique({ where: { id: activityId } }),
+    ).not.toBeNull()
+  })
+
+  it.each(['admin', 'superadmin'] as const)(
+    'ne rétrograde JAMAIS un compte %s',
+    async (role) => {
+      const email = testEmail(`del-${role}`)
+      await db.user.create({ data: { email, name: 'Privilégié', role } })
+      const { operatorId } = await createOperator({
+        email,
+        name: 'Privilégié',
+        displayName: `Société ${role}`,
+      })
+
+      await deleteOperator({ operatorId })
+
+      expect(await roleOf(email)).toBe(role)
+    },
+  )
+})
+
+describe('désactivation d\'un opérateur', () => {
+  it('archive les activités, rétrograde le compte et garde les réservations', async () => {
+    const { operatorId, email, activityId } = await operatorWithActivity('desac')
+    const booking = await bookingOn(activityId)
+
+    const result = await setOperatorActive({ operatorId, active: false })
+    expect(result.archivedActivities).toBe(1)
+
+    const activity = await db.activity.findUnique({ where: { id: activityId } })
+    expect(activity?.status).toBe('archived')
+    expect(await roleOf(email)).toBe('tourist')
+
+    // Ce qui distingue la désactivation de la suppression : l'historique
+    // survit, et son titulaire peut toujours le consulter.
+    expect(
+      await db.booking.findUnique({ where: { id: booking.id } }),
+    ).not.toBeNull()
+  })
+
+  it('réactive sans DÉSARCHIVER les activités', async () => {
+    // Republier en masse ressusciterait des départs passés et des prix
+    // périmés : l'admin rouvre chaque fiche en connaissance de cause.
+    const { operatorId, email, activityId } = await operatorWithActivity('react')
+    await setOperatorActive({ operatorId, active: false })
+
+    await setOperatorActive({ operatorId, active: true })
+
+    const operator = await db.operator.findUnique({ where: { id: operatorId } })
+    expect(operator?.active).toBe(true)
+    expect(await roleOf(email)).toBe('operator')
+
+    const activity = await db.activity.findUnique({ where: { id: activityId } })
+    expect(activity?.status).toBe('archived')
+  })
+
+  it('ferme l\'espace opérateur MÊME si la session porte encore le rôle', async () => {
+    // Le trou que la seule rétrogradation de rôle laissait ouvert.
+    //
+    // `ctx.user.role` vient de la session, pas de la base : après
+    // `setOperatorActive(false)`, le rôle reste `operator` dans la session
+    // jusqu'au rafraîchissement de son cache — jusqu'à 5 minutes. On forge donc
+    // ici exactement cette session périmée, et on vérifie que
+    // `operatorProcedure` refuse quand même, sur la foi de `operator.active`.
+    const { operatorId, email } = await operatorWithActivity('espace')
+    const user = await db.user.findUniqueOrThrow({ where: { email } })
+
+    const caller = createCaller({
+      db,
+      headers: new Headers(),
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        // La session d'AVANT la désactivation.
+        role: 'operator',
+      },
+      features: { ...FEATURE_DEFAULTS },
+    })
+
+    // Avant : l'accès fonctionne.
+    await expect(caller.operator.listActivities()).resolves.toBeDefined()
+
+    await setOperatorActive({ operatorId, active: false })
+
+    await expect(caller.operator.listActivities()).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    })
+  })
+
+  it('rouvre l\'espace opérateur à la réactivation', async () => {
+    const { operatorId, email } = await operatorWithActivity('reouverture')
+    const user = await db.user.findUniqueOrThrow({ where: { email } })
+
+    const caller = createCaller({
+      db,
+      headers: new Headers(),
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: 'operator',
+      },
+      features: { ...FEATURE_DEFAULTS },
+    })
+
+    await setOperatorActive({ operatorId, active: false })
+    await setOperatorActive({ operatorId, active: true })
+
+    await expect(caller.operator.listActivities()).resolves.toBeDefined()
+  })
+
+  it('sort du sélecteur d\'opérateurs de la création de fiche', async () => {
+    // Sinon on pourrait créer une fiche neuve chez un prestataire dont on vient
+    // d'archiver tout le catalogue.
+    const { operatorId } = await operatorWithActivity('selecteur')
+    expect(
+      (await listOperatorOptions()).some((o) => o.id === operatorId),
+    ).toBe(true)
+
+    await setOperatorActive({ operatorId, active: false })
+
+    expect(
+      (await listOperatorOptions()).some((o) => o.id === operatorId),
+    ).toBe(false)
+  })
+
+  it.each(['admin', 'superadmin'] as const)(
+    'ne rétrograde JAMAIS un compte %s',
+    async (role) => {
+      const email = testEmail(`desac-${role}`)
+      await db.user.create({ data: { email, name: 'Privilégié', role } })
+      const { operatorId } = await createOperator({
+        email,
+        name: 'Privilégié',
+        displayName: `Société ${role}`,
+      })
+
+      await setOperatorActive({ operatorId, active: false })
+
+      expect(await roleOf(email)).toBe(role)
+    },
+  )
+})
+
+describe('listing des opérateurs', () => {
+  it('expose le nombre de réservations et en dérive la suppressibilité', async () => {
+    // `deletable` est dérivé CÔTÉ SERVEUR : l'écran qui reconstituerait la
+    // règle finirait par proposer un bouton que la procédure rejette.
+    const vierge = await operatorWithActivity('listing-vierge')
+    const vendu = await operatorWithActivity('listing-vendu')
+    await bookingOn(vendu.activityId)
+
+    const rows = await listOperators()
+    const a = rows.find((r) => r.operatorId === vierge.operatorId)
+    const b = rows.find((r) => r.operatorId === vendu.operatorId)
+
+    expect(a?.bookingCount).toBe(0)
+    expect(a?.deletable).toBe(true)
+    expect(b?.bookingCount).toBe(1)
+    expect(b?.deletable).toBe(false)
+    expect(b?.active).toBe(true)
   })
 })

@@ -46,6 +46,10 @@ export const activityInputSchema = z.object({
   // `Journée`), et les activités saisies avec le mauvais n'apparaissaient dans
   // aucun filtre. Les valeurs affichées viennent des mêmes constantes.
   region: z.enum(REGION_VALUES),
+  // En mode `slot`, cette valeur est IGNORÉE à l'écriture : le libellé est
+  // dérivé de `durationMinutes` par `durationLabel`. Elle reste exigée parce
+  // qu'elle fait foi en mode `daily`, où il n'y a aucune durée numérique dont
+  // la déduire — c'est le touriste qui choisit la sienne.
   duration: z.enum(DURATIONS),
   description: activityDescriptionSchema,
   // Le prix est en euros par personne. Le plafond n'est pas cosmétique : la
@@ -56,7 +60,54 @@ export const activityInputSchema = z.object({
   imageUrls: z.array(imageUrl).min(1, 'Au moins une image').max(10),
   included: trimmedList,
   excluded: trimmedList,
+
+  /**
+   * Comment l'activité se vend. `slot` par défaut : c'est le modèle historique,
+   * et toute fiche saisie avant l'existence de ce champ en relève.
+   */
+  bookingMode: z.enum(['slot', 'daily']).default('slot'),
+
+  /**
+   * Durée réelle d'une activité sur créneau. C'est elle qui transforme un
+   * départ de 8:00 en « 08:00 – 10:00 ».
+   *
+   * Le plancher à 15 min et le plafond à 14 jours ne sont pas cosmétiques : en
+   * dessous le créneau n'a pas de sens, au-dessus on décrit un séjour, qui
+   * relève du mode journée.
+   */
+  durationMinutes: z.number().int().min(15).max(20_160).optional(),
+
+  /**
+   * Stock d'unités louables simultanément, en mode journée. Une Jeep = 1.
+   *
+   * À NE PAS confondre avec `maxParticipants`, qui est le nombre de places du
+   * véhicule. 4 places ne veut pas dire 4 véhicules — et c'est cette
+   * colonne-ci, pas l'autre, qui empêche de promettre deux fois la même
+   * voiture.
+   */
+  dailyUnits: z.number().int().min(1).max(500).optional(),
 })
+  // Chaque mode exige SA colonne. Les CHECK `activities_slot_requires_duration`
+  // et `activities_daily_requires_units` le refuseraient de toute façon, mais
+  // avec un message Prisma sur lequel personne ne peut agir.
+  .superRefine((value, ctx) => {
+    if (value.bookingMode === 'slot' && value.durationMinutes === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['durationMinutes'],
+        message: 'Indiquez la durée de l’activité, en minutes.',
+      })
+    }
+
+    if (value.bookingMode === 'daily' && value.dailyUnits === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['dailyUnits'],
+        message:
+          'Indiquez combien d’unités peuvent être louées en même temps (1 pour un véhicule unique).',
+      })
+    }
+  })
 
 export const updateActivitySchema = z.object({
   activityId: z.string().min(1),

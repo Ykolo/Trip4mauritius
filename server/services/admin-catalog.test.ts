@@ -62,13 +62,19 @@ async function makeOperator(label: string) {
   })
 }
 
-async function activityInput(): Promise<ActivityInput> {
+async function activityInput(
+  overrides: Partial<ActivityInput> = {},
+): Promise<ActivityInput> {
   return {
     // Le slug est dérivé du titre : ce préfixe est ce que `cleanup` ramasse.
     title: `${TEST_PREFIX}sortie ${stamp()}`,
     categoryId: await testCategoryId(),
     region: 'North',
     duration: '< 2h',
+    bookingMode: 'slot' as const,
+    // Cohérent avec le libellé : `durationLabel` le DÉRIVE de cette valeur en
+    // mode créneau, donc 90 doit bien redonner « < 2h ».
+    durationMinutes: 90,
     description: { fr: 'Une sortie de test.' },
     priceHT: 120,
     maxParticipants: 12,
@@ -76,6 +82,7 @@ async function activityInput(): Promise<ActivityInput> {
     imageUrls: ['/images/test.jpg'],
     included: ['Guide'],
     excluded: [],
+    ...overrides,
   }
 }
 
@@ -89,6 +96,7 @@ async function publishedActivity(operatorId: string) {
       title: 'Sortie en ligne',
       region: 'West',
       duration: 'Demi-journée',
+      durationMinutes: 240,
       priceHt: 90,
       maxParticipants: 10,
       status: 'published',
@@ -203,6 +211,31 @@ describe('mise en ligne', () => {
     expect(back.status).toBe('draft')
   })
 
+  it('met en ligne une activité à la journée sans exiger de créneau', async () => {
+    const operator = await makeOperator('e-daily')
+    const draft = await createActivityForAdmin(
+      operator.id,
+      await activityInput({
+        bookingMode: 'daily',
+        duration: 'Journée',
+        durationMinutes: undefined,
+        dailyUnits: 3,
+      }),
+    )
+
+    // La garde sur les créneaux est l'un des trois écarts que ce fichier
+    // protège — encore faut-il qu'elle ne s'applique qu'au mode qui a des
+    // créneaux. Passer par `setActivityStatusForAdmin`, et non par un
+    // `status: 'published'` posé en base, est TOUT l'objet du test : c'est le
+    // contournement qui avait masqué le blocage.
+    const online = await setActivityStatusForAdmin(draft.id, 'published')
+    expect(online.status).toBe('published')
+
+    expect(
+      await db.activitySlot.count({ where: { activityId: draft.id } }),
+    ).toBe(0)
+  })
+
   it('refuse une transition vers un état déjà atteint', async () => {
     const operator = await makeOperator('f')
     const { activity } = await publishedActivity(operator.id)
@@ -263,7 +296,7 @@ describe('créneaux', () => {
 
     await createBookings({
       userId: tourist.id,
-      lines: [{ slotId: slot.id, participants: 2 }],
+      lines: [{ mode: 'slot' as const, slotId: slot.id, participants: 2 }],
       contactPhone: '+23057000000',
     })
 

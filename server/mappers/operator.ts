@@ -82,6 +82,9 @@ export function toOperatorActivityDetail(
     ...toOperatorActivitySummary(activity),
     slotCount: activity.slots.length,
     duration: activity.duration,
+    bookingMode: activity.bookingMode,
+    durationMinutes: activity.durationMinutes,
+    dailyUnits: activity.dailyUnits,
     maxParticipants: activity.maxParticipants,
     languages: activity.languages,
     imageUrls: activity.imageUrls,
@@ -94,9 +97,11 @@ export function toOperatorActivityDetail(
   }
 }
 
+// L'activité vient de la réservation, plus du créneau : une location à la
+// journée n'en a pas.
 export type OperatorBookingRow_ = DbBooking & {
   user: DbUser
-  slot: DbSlot & { activity: DbActivity }
+  activity: DbActivity
 }
 
 export function toOperatorBookingRow(
@@ -105,14 +110,18 @@ export function toOperatorBookingRow(
   return {
     id: booking.id,
     bookingRef: booking.bookingRef,
-    date: mauritiusDate(booking.slot.startsAt),
-    time: mauritiusTime(booking.slot.startsAt),
+    // La période est portée par la réservation elle-même — c'est ce qui permet
+    // à cette ligne de décrire indifféremment un départ et une location.
+    date: mauritiusDate(booking.startsAt),
+    time: mauritiusTime(booking.startsAt),
+    endDate: booking.endsAt ? mauritiusDate(booking.endsAt) : null,
+    endTime: booking.endsAt ? mauritiusTime(booking.endsAt) : null,
     touristName: booking.user.name,
     // Le numéro FIGÉ sur la réservation, jamais `user.phone` : le client a pu
     // changer son profil depuis, l'opérateur doit voir ce qui a été donné pour
     // CE départ.
     contactPhone: booking.contactPhone,
-    activityTitle: booking.slot.activity.title,
+    activityTitle: booking.activity.title,
     participants: booking.participants,
     totalPrice: booking.totalPrice.toNumber(),
     depositDue: booking.depositDue.toNumber(),

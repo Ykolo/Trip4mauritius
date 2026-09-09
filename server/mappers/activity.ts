@@ -19,11 +19,37 @@ import type {
 // le front consomme `spotsLeft`. Cette conversion ne doit exister qu'ici :
 // dupliquée ailleurs, elle divergera tôt ou tard.
 
-export function toActivitySlot(slot: DbSlot): ActivitySlot {
+const MINUTES_IN_DAY = 24 * 60
+
+/**
+ * `durationMinutes` vient de l'ACTIVITÉ, pas du créneau : c'est pourquoi il est
+ * passé en second argument plutôt que lu sur `slot`. L'heure de fin est dérivée
+ * ici, au point de conversion unique, et nulle part ailleurs — recalculée dans
+ * un composant, elle aurait fini par utiliser le fuseau du navigateur, et un
+ * départ de 09:00 se serait terminé à 09:00 pour un touriste à Paris.
+ *
+ * Au-delà de 24 h, l'heure de fin ne veut plus rien dire comme BORNE DE PLAGE :
+ * une sortie de 24 h affichait « 09:00 – 09:00 », lu comme une durée nulle,
+ * et une de 30 h « 09:00 – 15:00 », lu comme six heures. Le schéma autorise
+ * jusqu'à 14 jours en mode créneau, ce cas n'est donc pas théorique. On rend
+ * `null` : l'écran retombe sur la seule heure de départ, qui reste vraie.
+ * Traverser minuit, en revanche, est parfaitement lisible — « 23:00 – 02:00 »
+ * décrit bien une sortie de nuit.
+ */
+export function toActivitySlot(
+  slot: DbSlot,
+  durationMinutes: number | null,
+): ActivitySlot {
   return {
     id: slot.id,
     date: mauritiusDate(slot.startsAt),
     time: mauritiusTime(slot.startsAt),
+    endTime:
+      durationMinutes === null || durationMinutes >= MINUTES_IN_DAY
+        ? null
+        : mauritiusTime(
+            new Date(slot.startsAt.getTime() + durationMinutes * 60_000),
+          ),
     spotsLeft: slot.maxSpots - slot.spotsTaken,
     maxSpots: slot.maxSpots,
   }
@@ -87,6 +113,9 @@ export function toActivityFull(
 ): ActivityFull {
   return {
     ...toActivity(activity),
+    bookingMode: activity.bookingMode,
+    durationMinutes: activity.durationMinutes,
+    dailyUnits: activity.dailyUnits,
     maxParticipants: activity.maxParticipants,
     languages: activity.languages,
     imageUrls: activity.imageUrls,
@@ -94,7 +123,9 @@ export function toActivityFull(
     included: activity.included,
     excluded: activity.excluded,
     operator: toActivityOperator(activity.operator),
-    slots: activity.slots.map(toActivitySlot),
+    slots: activity.slots.map((slot) =>
+      toActivitySlot(slot, activity.durationMinutes),
+    ),
     priceHT: activity.priceHt.toNumber(),
     reviewCount: activity.reviewCount,
   }

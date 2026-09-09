@@ -7,12 +7,14 @@ import {
   createCategorySchema,
   createOperatorSchema,
   moveCategorySchema,
+  operatorIdSchema,
   resetFeatureSchema,
   setBookingStatusSchema,
   setCategoryActiveSchema,
   setFeatureSchema,
-  setOperatorWhatsappSchema,
+  setOperatorActiveSchema,
   updateCategorySchema,
+  updateOperatorSchema,
 } from '@/lib/schemas/admin'
 import {
   activityIdSchema,
@@ -39,11 +41,13 @@ import {
 } from '@/server/services/admin-catalog'
 import {
   createOperator,
+  deleteOperator,
   getOverview,
   listBookingsForAdmin,
   listOperators,
   setBookingStatus,
-  setOperatorWhatsapp,
+  setOperatorActive,
+  updateOperator,
 } from '@/server/services/admin'
 import {
   createCategory,
@@ -95,17 +99,25 @@ export const adminRouter = createTRPCRouter({
     .input(createOperatorSchema)
     .mutation(({ input }) => createOperator(input)),
 
-  // Réservé à l'admin, et pas seulement par commodité : c'est le numéro que le
-  // back-office compose pour joindre le prestataire. Ouvert à l'espace
+  // Réservé à l'admin, et pas seulement par commodité : on édite ici le numéro
+  // que le back-office compose pour joindre le prestataire. Ouvert à l'espace
   // opérateur, il donnerait à celui-ci le moyen de se rendre injoignable.
-  setOperatorWhatsapp: adminProcedure
-    .input(setOperatorWhatsappSchema)
-    .mutation(({ input }) =>
-      setOperatorWhatsapp({
-        operatorId: input.operatorId,
-        whatsapp: input.whatsapp ?? null,
-      }),
-    ),
+  updateOperator: adminProcedure
+    .input(updateOperatorSchema)
+    .mutation(({ input }) => updateOperator(input)),
+
+  // Suppression franche, possible uniquement sur un opérateur sans aucune
+  // réservation. Le service recompte sous transaction : le bouton dessiné par
+  // le listing indique, il n'autorise pas.
+  deleteOperator: adminProcedure
+    .input(operatorIdSchema)
+    .mutation(({ input }) => deleteOperator(input)),
+
+  // La sortie de scène de tout prestataire qui a déjà vendu : activités
+  // archivées, compte rétrogradé, historique des réservations conservé.
+  setOperatorActive: adminProcedure
+    .input(setOperatorActiveSchema)
+    .mutation(({ input }) => setOperatorActive(input)),
 
   // Les interrupteurs sont réservés au super admin (Kled), pas à
   // l'administrateur Trip4mauritius : ils commandent ce que le client voit,

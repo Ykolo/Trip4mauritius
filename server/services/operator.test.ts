@@ -65,6 +65,8 @@ async function activityInput(
     categoryId: await testCategoryId(),
     region: 'North',
     duration: '< 2h',
+    bookingMode: 'slot' as const,
+    durationMinutes: 90,
     description: { fr: 'Une sortie de test.' },
     priceHT: 80,
     maxParticipants: 12,
@@ -132,7 +134,7 @@ describe('cloisonnement entre opérateurs', () => {
     })
     await createBookings({
       userId: tourist.id,
-      lines: [{ slotId: withSlot.slots[0].id, participants: 2 }],
+      lines: [{ mode: 'slot' as const, slotId: withSlot.slots[0].id, participants: 2 }],
       contactPhone: '+230 5000 0000',
     })
 
@@ -185,6 +187,33 @@ describe('cycle de vie des activités', () => {
 
     const published = await publishOwnActivity(a.operatorId, created.id)
     expect(published.status).toBe('published')
+  })
+
+  it('met en ligne une activité à la journée, qui n\'a aucun créneau', async () => {
+    const a = await makeOperator('a')
+    const created = await createActivity(
+      a.operatorId,
+      await activityInput({
+        bookingMode: 'daily',
+        duration: 'Journée',
+        // Une location n'a pas de durée fixe : c'est le touriste qui la choisit.
+        durationMinutes: undefined,
+        dailyUnits: 2,
+      }),
+    )
+
+    // Le vrai chemin de publication, PAS un `status: 'published'` écrit en base.
+    // C'est précisément ce raccourci, pris dans la fixture de `booking.test.ts`,
+    // qui avait laissé une activité à la journée impubliable pour toujours sans
+    // qu'aucun test ne le voie : les deux gardes exigeaient un créneau à venir,
+    // qu'un mode journée n'a jamais.
+    const published = await publishOwnActivity(a.operatorId, created.id)
+    expect(published.status).toBe('published')
+
+    // Et elle n'a bien créé aucun créneau au passage.
+    expect(
+      await db.activitySlot.count({ where: { activityId: created.id } }),
+    ).toBe(0)
   })
 
   it('laisse en ligne une activité publiée que l\'on modifie', async () => {
@@ -282,7 +311,7 @@ describe('créneaux', () => {
     })
     await createBookings({
       userId: tourist.id,
-      lines: [{ slotId, participants: 1 }],
+      lines: [{ mode: 'slot' as const, slotId, participants: 1 }],
       contactPhone: '+230 5000 0000',
     })
 

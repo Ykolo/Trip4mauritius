@@ -3,8 +3,14 @@
 import { useMemo } from 'react'
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
+import { cartItemKey, cartItemUnits } from '@/lib/cart-lines'
 import { computeBookingAmounts } from '@/lib/pricing'
 import type { CartItem, CartTotals } from '@/types/cart'
+
+// Ré-exportés pour que les écrans n'aient qu'un import à faire : la clé de
+// ligne et le store vont toujours ensemble. La définition, elle, vit dans
+// `lib/cart-lines.ts` — pure, et donc testable sans `localStorage`.
+export { cartItemKey, cartItemUnits }
 
 // Le panier vit dans le NAVIGATEUR, pas en base.
 //
@@ -20,10 +26,10 @@ import type { CartItem, CartTotals } from '@/types/cart'
 
 interface CartState {
   items: CartItem[]
-  /** Remplace la ligne si le créneau est déjà au panier. */
+  /** Remplace la ligne si la même clé est déjà au panier. */
   add: (item: CartItem) => void
-  remove: (slotId: string) => void
-  setParticipants: (slotId: string, participants: number) => void
+  remove: (key: string) => void
+  setParticipants: (key: string, participants: number) => void
   clear: () => void
   hasHydrated: boolean
 }
@@ -36,10 +42,14 @@ export const useCartStore = create<CartState>()(
 
       add: (item) =>
         set((state) => {
-          // Le créneau est la clé : ré-ajouter le même départ ajuste la ligne
-          // existante au lieu d'en créer une seconde, qui serait de toute façon
-          // refusée par la limite « une réservation active par créneau ».
-          const existing = state.items.findIndex((i) => i.slotId === item.slotId)
+          // Ré-ajouter la même ligne l'ajuste au lieu d'en créer une seconde,
+          // qui serait de toute façon refusée par la limite « une réservation
+          // active par créneau » — et, en mode journée, par son équivalent sur
+          // les périodes qui se chevauchent.
+          const key = cartItemKey(item)
+          const existing = state.items.findIndex(
+            (i) => cartItemKey(i) === key,
+          )
           if (existing === -1) return { items: [...state.items, item] }
 
           const items = [...state.items]
@@ -47,15 +57,15 @@ export const useCartStore = create<CartState>()(
           return { items }
         }),
 
-      remove: (slotId) =>
+      remove: (key) =>
         set((state) => ({
-          items: state.items.filter((i) => i.slotId !== slotId),
+          items: state.items.filter((i) => cartItemKey(i) !== key),
         })),
 
-      setParticipants: (slotId, participants) =>
+      setParticipants: (key, participants) =>
         set((state) => ({
           items: state.items.map((i) =>
-            i.slotId === slotId ? { ...i, participants } : i,
+            cartItemKey(i) === key ? { ...i, participants } : i,
           ),
         })),
 
@@ -64,6 +74,17 @@ export const useCartStore = create<CartState>()(
     {
       name: 'mauriexplore-cart',
       storage: createJSONStorage(() => localStorage),
+      // Les lignes d'avant le lot B portaient `slotId` et `pricePerPerson` à la
+      // racine, sans `mode`. Elles ne sont plus lisibles par l'union
+      // discriminée : gardées, elles auraient produit des lignes sans mode que
+      // chaque écran aurait interprétées différemment.
+      //
+      // On les JETTE plutôt que de les convertir : un panier n'engage rien,
+      // aucune place n'y est retenue, et le coût pour le visiteur est de
+      // resélectionner un départ. Écrire un convertisseur pour cela, c'était
+      // maintenir pour toujours un chemin de lecture que plus rien ne teste.
+      version: 1,
+      migrate: () => ({ items: [] }),
       // `hasHydrated` ne doit pas être relu depuis le stockage : c'est un état
       // de session, pas une donnée du panier.
       partialize: (state) => ({ items: state.items }),
@@ -91,9 +112,12 @@ export function useCartTotals(): CartTotals {
     let totalOnSite = 0
 
     for (const item of items) {
+      // Le prix unitaire ET la quantité dépendent tous deux du mode. Multiplier
+      // par `participants` dans les deux cas facturait la Jeep une fois par
+      // occupant.
       const amounts = computeBookingAmounts(
-        item.pricePerPerson,
-        item.participants,
+        item.pricePerUnit,
+        cartItemUnits(item),
       )
       totalPrice += amounts.totalPrice
       totalDeposit += amounts.depositDue
