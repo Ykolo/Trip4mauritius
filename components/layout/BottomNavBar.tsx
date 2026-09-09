@@ -10,7 +10,7 @@ import { whatsappHref } from "@/lib/whatsapp";
 const navItems = [
   { href: "/", label: "Explorer", icon: Home },
   { href: "/activities", label: "Activités", icon: Target },
-  { href: "/guide", label: "Guide", icon: BookOpen },
+  { href: "/guide", label: "Guides", icon: BookOpen },
 ];
 
 export function BottomNavBar() {
@@ -51,16 +51,28 @@ export function BottomNavBar() {
         })}
 
         {/* Sortie hors du site : c'est un <a>, pas un <Link>. `noreferrer`
-            évite de divulguer la page d'origine à WhatsApp. */}
+            évite de divulguer la page d'origine à WhatsApp.
+
+            Le libellé dit « Contact » et non « WhatsApp » : le visiteur n'a
+            pas à connaître le canal pour cliquer, et le nommer restreignait
+            l'invitation à ceux qui l'utilisent déjà. La destination, elle, ne
+            change pas — le client veut être joint là.
+
+            SEUL élément plein de la barre, en pastille pleine largeur de
+            texte : le contact est la conversion attendue de ce site, il ne
+            peut pas se présenter comme un quatrième onglet parmi les autres.
+            `aria-label` conserve la mention WhatsApp — annoncer la sortie vers
+            une application tierce est utile à qui ne voit pas l'icône. */}
         {showWhatsapp && (
           <a
             href={whatsappHref()}
             target="_blank"
             rel="noopener noreferrer"
-            className="relative flex flex-col items-center justify-center min-w-[48px] min-h-[48px] px-3 text-muted active:scale-95 transition-transform"
+            aria-label="Nous contacter sur WhatsApp"
+            className="flex items-center gap-2 h-11 min-w-[48px] px-4 rounded-full bg-primary text-white shadow-card ring-4 ring-primary/10 active:scale-95 transition-transform"
           >
             <MessageCircle className="w-5 h-5" />
-            <span className="text-xs font-body font-medium mt-1">WhatsApp</span>
+            <span className="text-sm font-body font-semibold">Contact</span>
           </a>
         )}
       </div>
