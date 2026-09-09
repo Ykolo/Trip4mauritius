@@ -29,6 +29,49 @@ const ALLOWED_CONTENT_TYPES = [
 /** 8 Mo. Au-delà, c'est une photo qu'il fallait redimensionner avant. */
 const MAX_SIZE_BYTES = 8 * 1024 * 1024
 
+/**
+ * Diagnostic, consulté par le client APRÈS un échec — jamais avant.
+ *
+ * `upload()` ne remonte pas ce que cette route a répondu : dès que le POST
+ * ci-dessous rend autre chose qu'un jeton, la bibliothèque jette un « Failed to
+ * retrieve the client token » identique pour un refus de rôle, un stockage
+ * absent ou un fichier trop lourd (`retrieveClientToken`, dans
+ * `@vercel/blob/dist/client.js`). L'opérateur lisait donc un message qui ne
+ * désignait aucun geste — et surtout pas celui qu'il fallait faire.
+ *
+ * Sonder à l'affichage du formulaire aurait coûté une requête à chaque montage
+ * pour une réponse presque toujours « tout va bien ». On ne demande la raison
+ * qu'une fois qu'il y en a une.
+ *
+ * Toujours 200, y compris pour un refus : ce n'est pas la tentative d'envoi,
+ * c'est la question « pourquoi a-t-elle échoué ». L'autorisation reste posée
+ * sur le POST.
+ */
+export async function GET(request: Request): Promise<NextResponse> {
+  const session = await auth.api.getSession({ headers: request.headers })
+  const role = (session?.user as { role?: UserRole } | undefined)?.role
+
+  if (!role || !CAN_UPLOAD.includes(role)) {
+    return NextResponse.json({
+      ready: false,
+      error: "Vous n'avez pas le droit d'envoyer un fichier.",
+    })
+  }
+
+  // La cause réelle aujourd'hui : le store Blob n'est pas provisionné, donc
+  // `handleUpload` échoue sur le jeton manquant avant même de jouer ses
+  // rappels. Rien à corriger dans le formulaire — c'est une variable à poser.
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    return NextResponse.json({
+      ready: false,
+      error:
+        "L’envoi de photos n’est pas encore activé sur ce site (stockage non configuré). En attendant, collez l’URL d’une image déjà en ligne.",
+    })
+  }
+
+  return NextResponse.json({ ready: true })
+}
+
 export async function POST(request: Request): Promise<NextResponse> {
   const body = (await request.json()) as HandleUploadBody
 

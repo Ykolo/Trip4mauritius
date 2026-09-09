@@ -23,6 +23,32 @@ import { ImagePlus, Loader2 } from 'lucide-react'
 const ACCEPT = 'image/jpeg,image/png,image/webp,image/avif'
 const MAX_SIZE_BYTES = 8 * 1024 * 1024
 
+/**
+ * Traduit l'échec de `upload()` en une phrase qui désigne un geste.
+ *
+ * La bibliothèque ne transmet PAS ce que `/api/upload` a répondu : elle jette
+ * « Vercel Blob: Failed to retrieve the client token » dès que la route rend
+ * autre chose qu'un jeton, que ce soit un refus de rôle ou un stockage non
+ * provisionné. Ce message-là ne s'adresse pas à l'opérateur qui essaie de
+ * poser une photo sur son article — il ne lui dit ni ce qui manque, ni s'il y
+ * peut quelque chose.
+ *
+ * On redemande donc la raison à la route, en clair, une fois l'échec constaté.
+ * Si elle ne répond pas non plus, on garde le message d'origine : illisible
+ * vaut mieux qu'inventé.
+ */
+async function explainFailure(e: unknown): Promise<string> {
+  const original = e instanceof Error ? e.message : "L’envoi a échoué."
+  try {
+    const res = await fetch('/api/upload')
+    const body = (await res.json()) as { ready?: boolean; error?: string }
+    if (body.error) return body.error
+  } catch {
+    // Route injoignable : on ne sait rien de plus qu'au départ.
+  }
+  return original
+}
+
 export function ImageUploadButton({
   onUploaded,
   label = 'Envoyer une photo',
@@ -52,10 +78,9 @@ export function ImageUploadButton({
       })
       onUploaded(blob.url)
     } catch (e) {
-      // Le message du serveur remonte tel quel — « vous n'avez pas le droit »
-      // et « le stockage n'est pas configuré » demandent des gestes opposés,
-      // un « échec de l'envoi » générique ne les distinguerait pas.
-      setError(e instanceof Error ? e.message : "L’envoi a échoué.")
+      // « Vous n'avez pas le droit » et « le stockage n'est pas configuré »
+      // appellent des gestes opposés ; `upload()` les rend indiscernables.
+      setError(await explainFailure(e))
     } finally {
       setBusy(false)
       // Remis à zéro pour que réenvoyer le MÊME fichier redéclenche `change`.
