@@ -1,10 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { Globe, ChevronUp, Instagram, MessageCircle, Apple, Shield, Trophy, Zap } from "lucide-react";
+import { Globe, ChevronUp, Instagram, Apple, Shield, Trophy, Zap } from "lucide-react";
 import Image from "next/image";
 import { useFeature } from "@/components/providers/FeatureProvider";
-import { whatsappHref } from "@/lib/whatsapp";
+
+// lucide ne fournit pas de logo TikTok — ses icônes de marque se limitent aux
+// quelques héritées (Instagram, Apple ci-dessus). Le tracé officiel est donc
+// posé ici, à l'unique endroit qui l'utilise. `currentColor` le fait suivre la
+// couleur du lien, comme ses voisines.
+function TikTokIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={className}>
+      <path d="M16.6 5.82A4.28 4.28 0 0 1 15.54 3h-3.09v12.4a2.59 2.59 0 0 1-2.59 2.5 2.59 2.59 0 0 1 0-5.18c.27 0 .53.04.77.12v-3.2a5.76 5.76 0 0 0-.77-.05A5.72 5.72 0 0 0 4.14 15.3a5.72 5.72 0 0 0 5.72 5.72 5.72 5.72 0 0 0 5.72-5.72V9.01a7.35 7.35 0 0 0 4.28 1.37V7.3a4.28 4.28 0 0 1-3.26-1.48Z" />
+    </svg>
+  );
+}
 
 const languages = [
   { code: "fr", label: "Français", flag: "🇫🇷" },
@@ -21,7 +32,6 @@ const currencies = [
 
 export function Footer() {
   const showCurrency = useFeature("currency.selector");
-  const showWhatsapp = useFeature("whatsapp.contact");
 
   const [selectedLang, setSelectedLang] = useState(languages[0]);
   const [isLangOpen, setIsLangOpen] = useState(false);
@@ -38,14 +48,18 @@ export function Footer() {
           <Image src="/images/logo.jpg" alt="Trip4mauritius" width={180} height={60} className="h-12 w-auto object-contain rounded-xl drop-shadow-sm" />
           
           <div className="flex items-center gap-4">
-            <a href="https://instagram.com/trip4mauritius/" target="_blank" className="w-10 h-10 rounded-full bg-white/15 border border-white/20 flex items-center justify-center text-white hover:bg-white/25 hover:scale-110 transition-all">
+            <a href="https://instagram.com/trip4mauritius/" target="_blank" rel="noopener noreferrer" aria-label="Trip4mauritius sur Instagram" className="w-10 h-10 rounded-full bg-white/15 border border-white/20 flex items-center justify-center text-white hover:bg-white/25 hover:scale-110 transition-all">
               <Instagram className="w-5 h-5" />
             </a>
-            {showWhatsapp && (
-              <a href={whatsappHref()} target="_blank" rel="noopener noreferrer" aria-label="Nous contacter sur WhatsApp" className="w-10 h-10 rounded-full bg-white/15 border border-white/20 flex items-center justify-center text-white hover:bg-white/25 hover:scale-110 transition-all">
-                <MessageCircle className="w-5 h-5" />
-              </a>
-            )}
+            {/* TikTok prend la place du contact WhatsApp, retiré d'ici sur
+                demande du client. Ces deux pastilles sont désormais des
+                RÉSEAUX SOCIAUX, pas des canaux de contact : elles ne
+                dépendent donc d'aucun flag. Le contact WhatsApp, lui, reste
+                dans la barre du bas, toujours commandé par
+                `whatsapp.contact`. */}
+            <a href="https://www.tiktok.com/@trip4mauritius" target="_blank" rel="noopener noreferrer" aria-label="Trip4mauritius sur TikTok" className="w-10 h-10 rounded-full bg-white/15 border border-white/20 flex items-center justify-center text-white hover:bg-white/25 hover:scale-110 transition-all">
+              <TikTokIcon className="w-5 h-5" />
+            </a>
           </div>
         </div>
         
