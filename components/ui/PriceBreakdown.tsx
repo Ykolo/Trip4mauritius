@@ -1,6 +1,7 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { Minus, Plus, ShoppingCart, Check } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -31,6 +32,13 @@ export function PriceBreakdown({
   const addToCart = useCartStore((s) => s.add)
   const [participants, setParticipants] = useState(1)
   const [showToast, setShowToast] = useState(false)
+  // La confirmation part dans un portail, et un portail ne peut pas être créé
+  // au rendu serveur — `document` n'y existe pas. Ce drapeau retarde sa
+  // création au premier rendu client. Il ne peut pas être remplacé par
+  // `showToast &&` : c'est `AnimatePresence` qui doit SURVIVRE au retrait de
+  // son enfant pour en animer la sortie, donc le portail aussi.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
 
   const isDaily = activity.bookingMode === 'daily'
 
@@ -317,41 +325,62 @@ export function PriceBreakdown({
       {/* Desktop view is handled by page wrapper */}
       <div className="hidden md:block">{priceContent}</div>
 
-      <AnimatePresence>
-        {showToast && (
-          <motion.div
-            initial={{ opacity: 0, y: 50, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 50, scale: 0.9 }}
-            /* La confirmation se place AU-DESSUS de tout ce qui est collé en
-               bas, et elle est la dernière couche du site (`z-[70]`).
+      {/* La confirmation est rendue DANS `document.body`, par un portail, et
+          non à sa place dans l'arbre. Sans cela son `z-[70]` ne vaut rien.
 
-               Elle était à `bottom-8` sur grand écran, soit 32 px — sous la
-               barre de navigation du bas, haute de 64 px, qui n'est pas
-               réservée au mobile et occupe donc aussi le bas de l'écran de
-               bureau. La confirmation s'affichait bien, mais derrière : on
-               ajoutait au panier sans jamais voir que ça avait marché. Elle
-               passe à 96 px, ce qui la dégage franchement.
+          `PriceBreakdown` est rendu à l'intérieur de la colonne de réservation,
+          qui porte `position: sticky` — et **sticky crée un contexte
+          d'empilement**, au même titre que `fixed`, sans avoir besoin d'un
+          `z-index`. Tout `z-index` posé en dessous est donc comparé entre
+          frères de cette colonne, jamais au reste de la page : la colonne
+          entière se compare, elle, comme un `z-index: 0`. Le pied de page vient
+          APRÈS elle dans le DOM, à égalité de niveau — c'est l'ordre du
+          document qui tranche, et le logo passait devant la confirmation.
+          Mesuré : `elementsFromPoint` au centre du recouvrement rendait
+          `IMG|Trip4mauritius` en tête, la confirmation seulement en second ;
+          en neutralisant le seul `position: sticky`, l'ordre s'inverse.
 
-               Sur mobile, il faut dégager DEUX barres empilées : la navigation
-               (0 → 64 px) et le bandeau d'acompte juste au-dessus, mesuré à
-               124 px de haut. D'où 144 px : 128 px la posaient à 4 px du
-               bandeau, ce qui se lit comme un chevauchement. */
-            className="fixed bottom-36 md:bottom-24 left-1/2 -translate-x-1/2 bg-ink border border-white/10 text-white px-5 py-3 rounded-full shadow-2xl flex items-center gap-3 z-[70] font-body text-sm font-medium"
-          >
-            <div className="w-6 h-6 rounded-full bg-green-500/20 flex items-center justify-center">
-              <Check className="w-4 h-4 text-green-400" />
-            </div>
-            Ajouté au panier
-            <button
-              onClick={() => router.push('/cart')}
-              className="underline underline-offset-2 hover:text-primary transition-colors"
-            >
-              Voir le panier
-            </button>
-          </motion.div>
+          Le symptôme est le même que celui déjà corrigé plus bas à coups de
+          décalage vertical (`bottom-36`) — ce n'était pas le bon remède, la
+          confirmation passait sous les barres pour la même raison. Les
+          décalages restent : ils ne servent plus à passer devant, mais à ne
+          pas RECOUVRIR le bandeau d'acompte et la navigation, dont on veut
+          continuer à lire les commandes.
+
+          Portail au `body` et pas à un conteneur dédié : `body` est le seul
+          ancêtre dont on sait qu'aucun `transform`, `filter` ou `sticky` ne
+          viendra un jour l'enfermer à son tour. */}
+      {mounted &&
+        createPortal(
+          <AnimatePresence>
+            {showToast && (
+              <motion.div
+                initial={{ opacity: 0, y: 50, scale: 0.9 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 50, scale: 0.9 }}
+                /* Le décalage dégage DEUX barres empilées sur mobile : la
+                   navigation (0 → 64 px) et le bandeau d'acompte juste
+                   au-dessus, mesuré à 124 px de haut. D'où 144 px — 128 px la
+                   posaient à 4 px du bandeau, ce qui se lit comme un
+                   chevauchement. Sur grand écran il n'y a que la navigation,
+                   qui n'est pas réservée au mobile : 96 px la dégagent. */
+                className="fixed bottom-36 md:bottom-24 left-1/2 -translate-x-1/2 bg-ink border border-white/10 text-white px-5 py-3 rounded-full shadow-2xl flex items-center gap-3 z-[70] font-body text-sm font-medium"
+              >
+                <div className="w-6 h-6 rounded-full bg-green-500/20 flex items-center justify-center">
+                  <Check className="w-4 h-4 text-green-400" />
+                </div>
+                Ajouté au panier
+                <button
+                  onClick={() => router.push('/cart')}
+                  className="underline underline-offset-2 hover:text-primary transition-colors"
+                >
+                  Voir le panier
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body,
         )}
-      </AnimatePresence>
     </>
   )
 }
