@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Search, ShoppingCart, User, X } from "lucide-react";
+import { Search, ShoppingCart, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { SearchBox } from "@/components/layout/SearchBox";
@@ -18,6 +18,17 @@ import { useCartHydrated, useCartStore } from "@/lib/stores/cart";
 // n'était que de l'affichage, `/admin` restant gardé par `AdminGuard` côté
 // écran et par `adminProcedure` côté serveur. Ce sont toujours les deux seuls
 // contrôles réels.
+//
+// AUCUN raccourci vers `/account` non plus, pour la même raison et sur la même
+// décision du client : le touriste ne doit pas voir d'icône de profil. La page
+// existe toujours et reste protégée par `proxy.ts` puis par les procédures ;
+// elle n'a simplement plus de point d'entrée dans l'interface publique.
+//
+// ⚠️ Conséquence à connaître : `/account` porte AUSSI le formulaire de
+// connexion (`AuthForm`). Plus rien n'y mène désormais depuis le site public —
+// on n'y arrive que par la redirection de `proxy.ts` (visite d'une page
+// protégée) ou en tapant l'adresse. Le jour où une entrée « Se connecter » est
+// souhaitée, c'est un écran à part qu'il faudra, pas cette icône.
 
 export function TopBar() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -86,15 +97,6 @@ export function TopBar() {
             )}
           </Link>
 
-          {/* Le compte a quitté la barre du bas pour laisser sa place au
-              contact WhatsApp. Il reste atteignable de partout depuis ici. */}
-          <Link
-            href="/account"
-            className="min-w-[48px] min-h-[48px] flex items-center justify-center active:scale-95 transition-transform"
-            aria-label="Mon compte"
-          >
-            <User className="w-5 h-5 text-primary" />
-          </Link>
         </div>
       </div>
     </header>
